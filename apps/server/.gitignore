@@ -1,0 +1,5 @@
+
+# ML model weights + python env (large, not source)
+ml-venv/
+ml/dental_best.pt
+ml/dataset_export/

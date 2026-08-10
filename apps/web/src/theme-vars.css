@@ -1,0 +1,66 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--color-background);
+  color: var(--color-textPrimary);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter",
+    system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+  position: relative;
+}
+
+button {
+  font-family: inherit;
+}
+
+input {
+  font-family: inherit;
+}
+
+.sc-mesh-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.sc-mesh-blob {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(60px);
+  opacity: 0.55;
+  will-change: transform;
+  animation: sc-drift 20s ease-in-out infinite;
+}
+
+@keyframes sc-drift {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(18%, 22%) scale(1.25);
+  }
+  66% {
+    transform: translate(-20%, -14%) scale(0.8);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-mesh-blob {
+    animation: none;
+  }
+}

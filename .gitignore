@@ -1,0 +1,31 @@
+# Dependências
+node_modules/
+dist/
+build/
+.vite/
+
+# Segredos — o .env tem DATABASE_URL e DEV_SKIP_AUTH
+.env
+.env.*
+!.env.example
+
+# DADO DE PACIENTE — nunca versionar.
+# Radiografias, fotos clínicas e anexos de prontuário. Uma vez commitado,
+# apagar depois não resolve: fica no histórico do git para sempre.
+apps/server/uploads/
+
+# Ambiente Python e pesos do detector de radiografia (centenas de MB,
+# baixados por script, não são fonte)
+apps/server/ml-venv/
+apps/server/ml/*.pt
+apps/server/ml/dataset_export/
+
+# Sistema
+.DS_Store
+*.log
+
+# Projeto Xcode com repositorio git proprio
+Senhorita/
+
+# Config local do Claude Code
+.claude/
