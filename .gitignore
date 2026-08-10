@@ -29,3 +29,6 @@ Senhorita/
 
 # Config local do Claude Code
 .claude/
+
+# Scratch do subagent-driven-development
+.superpowers/
