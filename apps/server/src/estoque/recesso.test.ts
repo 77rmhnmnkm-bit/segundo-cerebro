@@ -96,22 +96,24 @@ describe("classificar", () => {
   const hoje = d(2026, 8, 10);
 
   it("sem validade informada", () => {
-    expect(classificar(null, 5, hoje)).toBe("sem_validade");
+    expect(classificar(null, hoje)).toBe("sem_validade");
   });
 
   it("validade já passou", () => {
-    expect(classificar(d(2026, 8, 1), 5, hoje)).toBe("vencido");
+    expect(classificar(d(2026, 8, 1), hoje)).toBe("vencido");
   });
 
-  it("dentro da validade mas o prazo real já passou", () => {
-    expect(classificar(d(2026, 8, 5), 5, d(2026, 8, 3))).toBe("vencido");
+  it("validade impressa ainda no futuro, mas o prazo real morreu no recesso", () => {
+    // 05/08/2026 cai dentro do recesso de julho (30/07 a 10/08), então o prazo
+    // útil era 29/07. Em 03/08 o rótulo ainda diz que está bom — não é "vencido".
+    expect(classificar(d(2026, 8, 5), d(2026, 8, 3))).toBe("prazo_passou");
   });
 
   it("armadilha de recesso ainda no futuro", () => {
-    expect(classificar(d(2026, 12, 22), 5, hoje)).toBe("armadilha");
+    expect(classificar(d(2026, 12, 22), hoje)).toBe("armadilha");
   });
 
   it("no prazo", () => {
-    expect(classificar(d(2027, 6, 1), 5, hoje)).toBe("no_prazo");
+    expect(classificar(d(2027, 6, 1), hoje)).toBe("no_prazo");
   });
 });

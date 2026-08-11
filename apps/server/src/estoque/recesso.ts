@@ -34,10 +34,6 @@ export const CALENDARIO_PADRAO: CalendarioRecesso = {
 
 const dia = (ano: number, mes: number, d: number) => new Date(ano, mes - 1, d);
 
-function somaDias(base: Date, n: number): Date {
-  return dia(base.getFullYear(), base.getMonth() + 1, base.getDate() + n);
-}
-
 function diffDias(a: Date, b: Date): number {
   const ma = dia(a.getFullYear(), a.getMonth() + 1, a.getDate()).getTime();
   const mb = dia(b.getFullYear(), b.getMonth() + 1, b.getDate()).getTime();
@@ -76,15 +72,19 @@ export function usarAte(validade: Date, cal: CalendarioRecesso = CALENDARIO_PADR
   return { data: validade, motivo: "validade", diasPerdidos: 0 };
 }
 
+// "vencido" e "prazo_passou" NÃO podem colapsar. Um lote cuja validade impressa
+// ainda não chegou, mas cujo prazo útil morreu no recesso, não está vencido: quem
+// conferir a caixa física vai ler uma data futura no rótulo. Chamar isso de
+// "vencido" contradiz o produto na mão do técnico e destrói a confiança no
+// sistema — e mistura achado sanitário com achado operacional no mesmo número.
 export function classificar(
   validade: Date | null,
-  quantidade: number,
   hoje: Date,
   cal: CalendarioRecesso = CALENDARIO_PADRAO,
 ): StatusLote {
   if (!validade) return "sem_validade";
   if (diffDias(validade, hoje) < 0) return "vencido";
   const r = usarAte(validade, cal);
-  if (diffDias(r.data, hoje) < 0) return "vencido";
+  if (diffDias(r.data, hoje) < 0) return "prazo_passou";
   return r.motivo === "validade" ? "no_prazo" : "armadilha";
 }
