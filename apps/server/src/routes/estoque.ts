@@ -41,7 +41,7 @@ const SELECT_LOTE = `
 // "prazo_passou" nunca disparavam, todo lote vencido caía em "no_prazo".
 // Normaliza para "YYYY-MM-DD" pelos componentes locais (nunca toISOString,
 // mesmo motivo do hojeLocal) antes de comparar ou devolver ao cliente.
-function dataLocal(d: unknown): string | null {
+export function dataLocal(d: unknown): string | null {
   if (d == null) return null;
   if (typeof d === "string") return d;
   const dt = d as Date;
@@ -49,11 +49,13 @@ function dataLocal(d: unknown): string | null {
   return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
 }
 
-function status(row: { validade: string | null; usar_ate: string | null }, hoje: string): string {
-  if (!row.validade) return "sem_validade";
-  if (row.validade < hoje) return "vencido";
-  if (row.usar_ate && row.usar_ate < hoje) return "prazo_passou";
-  if (row.usar_ate && row.usar_ate < row.validade) return "armadilha";
+export function status(row: { validade: Date | string | null; usar_ate: Date | string | null }, hoje: string): string {
+  const validadeNorm = dataLocal(row.validade);
+  const usarAteNorm = dataLocal(row.usar_ate);
+  if (!validadeNorm) return "sem_validade";
+  if (validadeNorm < hoje) return "vencido";
+  if (usarAteNorm && usarAteNorm < hoje) return "prazo_passou";
+  if (usarAteNorm && usarAteNorm < validadeNorm) return "armadilha";
   return "no_prazo";
 }
 
@@ -134,7 +136,7 @@ export async function estoqueRoutes(app: FastifyInstance) {
           precisaConferencia: r.precisa_conferencia,
           conferenciaMotivo: r.conferencia_motivo ?? [],
           observacoes: r.observacoes,
-          status: status({ validade, usar_ate: usarAte }, hoje),
+          status: status({ validade: r.validade, usar_ate: r.usar_ate }, hoje),
           diasPerdidos: Number(r.dias_perdidos),
         };
       }),
