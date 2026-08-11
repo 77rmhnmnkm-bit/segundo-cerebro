@@ -119,8 +119,8 @@ git commit -m "chore: adiciona Vitest ao monorepo"
 A função de deduplicação. Vive em dois lugares por causa da restrição de CommonJS, e um teste garante que as duas cópias nunca divirjam — foi exatamente essa divergência que fez o catálogo dar 286 numa contagem e 288 noutra.
 
 **Files:**
-- Create: `packages/core/norm.ts`
-- Modify: `packages/core/index.ts`
+- Create: `packages/core/src/norm.ts`
+- Modify: `packages/core/src/index.ts`
 - Create: `apps/server/src/estoque/norm.ts`
 - Create: `apps/server/src/estoque/norm.test.ts`
 - Delete: `apps/server/src/estoque/sanity.test.ts`
@@ -136,7 +136,7 @@ Create `apps/server/src/estoque/norm.test.ts`:
 ```ts
 import { describe, it, expect } from "vitest";
 import { norm, NORM_CASES } from "./norm.js";
-import { norm as normCore, NORM_CASES as CASES_CORE } from "../../../../packages/core/norm.js";
+import { norm as normCore, NORM_CASES as CASES_CORE } from "../../../../packages/core/src/norm.js";
 
 describe("norm", () => {
   it("remove maiúscula, acento e pontuação", () => {
@@ -192,7 +192,7 @@ Expected: FAIL — `Cannot find module './norm.js'`
 
 - [ ] **Step 3: Escrever a implementação em core**
 
-Create `packages/core/norm.ts`:
+Create `packages/core/src/norm.ts`:
 
 ```ts
 // Regra ÚNICA de deduplicação de produtos e marcas.
@@ -227,7 +227,7 @@ export const NORM_CASES: ReadonlyArray<[string, string]> = [
 
 - [ ] **Step 4: Exportar de core**
 
-Modify `packages/core/index.ts`, adicionando ao final:
+Modify `packages/core/src/index.ts`, adicionando ao final:
 
 ```ts
 export * from "./norm.js";
@@ -235,7 +235,7 @@ export * from "./norm.js";
 
 - [ ] **Step 5: Escrever a cópia do server**
 
-Create `apps/server/src/estoque/norm.ts` com **conteúdo idêntico** ao de `packages/core/norm.ts`, trocando apenas o comentário do topo:
+Create `apps/server/src/estoque/norm.ts` com **conteúdo idêntico** ao de `packages/core/src/norm.ts`, trocando apenas o comentário do topo:
 
 ```ts
 // Cópia local de packages/core/norm.ts.
@@ -287,7 +287,7 @@ Expected: PASS — 8 testes, nenhum falhando
 - [ ] **Step 9: Commit**
 
 ```bash
-git add packages/core/norm.ts packages/core/index.ts apps/server/src/estoque/norm.ts apps/server/src/estoque/norm.test.ts
+git add packages/core/src/norm.ts packages/core/src/index.ts apps/server/src/estoque/norm.ts apps/server/src/estoque/norm.test.ts
 git rm apps/server/src/estoque/sanity.test.ts
 git commit -m "feat(estoque): regra unica de normalizacao com teste de contrato"
 ```
@@ -311,7 +311,7 @@ O coração do módulo. Função pura, sem banco, sem rede. É o que sabe que um
   - `type JanelaRecesso = { ultimoLetivo: { mes: number; dia: number }; volta: { mes: number; dia: number } }`
   - `CALENDARIO_PADRAO: CalendarioRecesso`
   - `usarAte(validade: Date, cal?: CalendarioRecesso): ResultadoUsarAte`
-  - `classificar(validade: Date | null, quantidade: number, hoje: Date, cal?: CalendarioRecesso): StatusLote`
+  - `classificar(validade: Date | null, hoje: Date, cal?: CalendarioRecesso): StatusLote`
   - `type StatusLote = "vencido" | "prazo_passou" | "armadilha" | "no_prazo" | "sem_validade"`
 
 - [ ] **Step 1: Escrever o teste que falha**
@@ -417,23 +417,25 @@ describe("classificar", () => {
   const hoje = d(2026, 8, 10);
 
   it("sem validade informada", () => {
-    expect(classificar(null, 5, hoje)).toBe("sem_validade");
+    expect(classificar(null, hoje)).toBe("sem_validade");
   });
 
   it("validade já passou", () => {
-    expect(classificar(d(2026, 8, 1), 5, hoje)).toBe("vencido");
+    expect(classificar(d(2026, 8, 1), hoje)).toBe("vencido");
   });
 
-  it("dentro da validade mas o prazo real já passou", () => {
-    expect(classificar(d(2026, 8, 5), 5, d(2026, 8, 3))).toBe("vencido");
+  it("validade impressa ainda no futuro, mas o prazo real morreu no recesso", () => {
+    // 05/08/2026 cai dentro do recesso de julho (30/07 a 10/08), entao o prazo
+    // util era 29/07. Em 03/08 o rotulo ainda diz que esta bom — nao e "vencido".
+    expect(classificar(d(2026, 8, 5), d(2026, 8, 3))).toBe("prazo_passou");
   });
 
   it("armadilha de recesso ainda no futuro", () => {
-    expect(classificar(d(2026, 12, 22), 5, hoje)).toBe("armadilha");
+    expect(classificar(d(2026, 12, 22), hoje)).toBe("armadilha");
   });
 
   it("no prazo", () => {
-    expect(classificar(d(2027, 6, 1), 5, hoje)).toBe("no_prazo");
+    expect(classificar(d(2027, 6, 1), hoje)).toBe("no_prazo");
   });
 });
 ```
@@ -484,10 +486,6 @@ export const CALENDARIO_PADRAO: CalendarioRecesso = {
 
 const dia = (ano: number, mes: number, d: number) => new Date(ano, mes - 1, d);
 
-function somaDias(base: Date, n: number): Date {
-  return dia(base.getFullYear(), base.getMonth() + 1, base.getDate() + n);
-}
-
 function diffDias(a: Date, b: Date): number {
   const ma = dia(a.getFullYear(), a.getMonth() + 1, a.getDate()).getTime();
   const mb = dia(b.getFullYear(), b.getMonth() + 1, b.getDate()).getTime();
@@ -526,16 +524,20 @@ export function usarAte(validade: Date, cal: CalendarioRecesso = CALENDARIO_PADR
   return { data: validade, motivo: "validade", diasPerdidos: 0 };
 }
 
+// "vencido" e "prazo_passou" NAO podem colapsar. Um lote cuja validade impressa
+// ainda nao chegou, mas cujo prazo util morreu no recesso, nao esta vencido: quem
+// conferir a caixa fisica vai ler uma data futura no rotulo. Chamar isso de
+// "vencido" contradiz o produto na mao do tecnico e destroi a confianca no
+// sistema — e mistura achado sanitario com achado operacional no mesmo numero.
 export function classificar(
   validade: Date | null,
-  quantidade: number,
   hoje: Date,
   cal: CalendarioRecesso = CALENDARIO_PADRAO,
 ): StatusLote {
   if (!validade) return "sem_validade";
   if (diffDias(validade, hoje) < 0) return "vencido";
   const r = usarAte(validade, cal);
-  if (diffDias(r.data, hoje) < 0) return "vencido";
+  if (diffDias(r.data, hoje) < 0) return "prazo_passou";
   return r.motivo === "validade" ? "no_prazo" : "armadilha";
 }
 ```
@@ -700,10 +702,75 @@ Expected: o `insert` responde `INSERT 0 1`; o `delete` falha com `ERROR: est_aud
 
 A linha de teste fica lá para sempre — é o comportamento correto e o preço de testar isto.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Fechar o buraco do TRUNCATE e travar saldos negativos**
+
+O trigger da 0030 é `for each row`, e **`TRUNCATE` não dispara trigger de linha** — o log
+inteiro podia ser zerado sem erro. Verificado empiricamente no banco.
+
+Create `apps/server/migrations/0031_estoque_integridade.sql`:
+
+```sql
+-- O trigger da 0030 é "for each row", e TRUNCATE não dispara trigger de linha:
+-- um "truncate est_audit_log" zerava todo o rastro sanitário sem erro nenhum.
+-- Este trigger de statement fecha o buraco. A função já levanta exceção
+-- incondicionalmente, então serve para os dois casos.
+drop trigger if exists est_audit_log_no_truncate on est_audit_log;
+create trigger est_audit_log_no_truncate
+  before truncate on est_audit_log
+  for each statement execute function est_audit_log_block_mutation();
+
+-- Contagem negativa de material é estado impossível. Sem isto, um erro de
+-- sincronia levaria um lote a saldo negativo e o banco aceitaria calado.
+alter table est_lotes drop constraint if exists est_lotes_quantidade_nao_negativa;
+alter table est_lotes add constraint est_lotes_quantidade_nao_negativa
+  check (quantidade >= 0);
+
+alter table est_movimentos drop constraint if exists est_movimentos_quantidade_positiva;
+alter table est_movimentos add constraint est_movimentos_quantidade_positiva
+  check (quantidade > 0);
+
+alter table est_movimentos drop constraint if exists est_movimentos_saldos_nao_negativos;
+alter table est_movimentos add constraint est_movimentos_saldos_nao_negativos
+  check (saldo_antes >= 0 and saldo_depois >= 0);
+
+-- Descarte é atômico: ou tem data E motivo, ou não aconteceu. "Meio descartado"
+-- não é estado que o rastro sanitário possa representar.
+alter table est_lotes drop constraint if exists est_lotes_descarte_completo;
+alter table est_lotes add constraint est_lotes_descarte_completo
+  check ((descartado_em is null) = (descarte_motivo is null));
+
+-- Marcar "precisa conferência" sem dizer por quê não ajuda ninguém.
+alter table est_lotes drop constraint if exists est_lotes_conferencia_tem_motivo;
+alter table est_lotes add constraint est_lotes_conferencia_tem_motivo
+  check (not precisa_conferencia or coalesce(array_length(conferencia_motivo, 1), 0) >= 1);
+```
+
+Run: `pnpm --filter server migrate`
+Expected: `Running migration: 0031_estoque_integridade.sql` seguido de `Migrations complete.`
+
+- [ ] **Step 6: Provar que o TRUNCATE agora falha**
 
 ```bash
-git add apps/server/migrations/0030_estoque_clinica.sql
+psql "$DATABASE_URL" -c "begin; truncate est_audit_log; rollback;"
+```
+
+Expected: falha com `ERROR: est_audit_log é append-only: UPDATE/DELETE não são permitidos.`
+
+Se passar sem erro, o trigger de statement não foi criado — confira o `before truncate`.
+
+- [ ] **Step 7: Conferir as constraints**
+
+```bash
+psql "$DATABASE_URL" -tAc "select conname from pg_constraint where conrelid = 'est_lotes'::regclass and contype = 'c' order by conname;"
+```
+
+Expected: inclui `est_lotes_conferencia_tem_motivo`, `est_lotes_descarte_completo` e
+`est_lotes_quantidade_nao_negativa`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add apps/server/migrations/0030_estoque_clinica.sql apps/server/migrations/0031_estoque_integridade.sql
 git commit -m "feat(estoque): esquema produto/lote/local/movimento com log append-only"
 ```
 
@@ -740,7 +807,7 @@ Create `apps/server/src/estoque/planilha.test.ts`:
 
 ```ts
 import { describe, it, expect } from "vitest";
-import { parseQuantidade, parseValidadeSerial } from "./planilha.js";
+import { parseQuantidade, parseValidadeSerial, ehVerdadeiro } from "./planilha.js";
 
 const iso = (x: Date | null) =>
   x ? `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}` : null;
@@ -787,7 +854,39 @@ describe("parseValidadeSerial", () => {
   });
 
   it("aceita Date já convertida pelo ExcelJS", () => {
-    expect(iso(parseValidadeSerial(new Date(2027, 2, 1) as unknown as number))).toBe("2027-03-01");
+    // Date.UTC porque é assim que o ExcelJS entrega. Usar new Date(2027, 2, 1)
+    // passava por acaso em UTC-3 e quebrava em fuso positivo.
+    expect(iso(parseValidadeSerial(new Date(Date.UTC(2027, 2, 1))))).toBe("2027-03-01");
+  });
+
+  it("Date ancorada em meia-noite UTC devolve o mesmo dia-calendário", () => {
+    // Ler com getters LOCAIS em UTC-3 daria 2023-02-28 — foi o bug real,
+    // em 358 de 358 linhas da planilha.
+    expect(iso(parseValidadeSerial(new Date(Date.UTC(2023, 2, 1))))).toBe("2023-03-01");
+  });
+});
+
+describe("ehVerdadeiro — formato de fórmula do ExcelJS", () => {
+  it('{ formula: "TRUE()", result: true } é verdadeiro', () => {
+    expect(ehVerdadeiro({ formula: "TRUE()", result: true })).toBe(true);
+  });
+
+  it('{ formula: "FALSE()" } sem "result" é falso', () => {
+    expect(ehVerdadeiro({ formula: "FALSE()" })).toBe(false);
+  });
+
+  it('{ formula: "FALSE()", result: false } é falso', () => {
+    expect(ehVerdadeiro({ formula: "FALSE()", result: false })).toBe(false);
+  });
+
+  it('string "1" ainda é aceita como verdadeiro', () => {
+    expect(ehVerdadeiro("1")).toBe(true);
+  });
+
+  it("null, undefined e string vazia são falsos", () => {
+    expect(ehVerdadeiro(null)).toBe(false);
+    expect(ehVerdadeiro(undefined)).toBe(false);
+    expect(ehVerdadeiro("")).toBe(false);
   });
 });
 ```
@@ -837,10 +936,17 @@ export function parseQuantidade(bruto: string): { valor: number | null; unidade:
 // em UTC-3.
 const EPOCH_EXCEL = Date.UTC(1899, 11, 30);
 
+// CONTRATO: o parâmetro Date só é válido ancorado em meia-noite UTC, que é o
+// que o ExcelJS entrega. Uma Date construída com componentes locais às 21h ou
+// mais tarde (UTC-3) seria lida como o dia seguinte — construa com Date.UTC()
+// antes de passar. A ambiguidade é irresolúvel a partir do valor.
 export function parseValidadeSerial(bruto: string | number | Date | null): Date | null {
   if (bruto === null || bruto === undefined || bruto === "") return null;
   if (bruto instanceof Date) {
-    return new Date(bruto.getFullYear(), bruto.getMonth(), bruto.getDate());
+    // Getters UTC, não locais: o ExcelJS ancora em meia-noite UTC e ler com
+    // getters locais em UTC-3 recuava TODAS as 358 validades em um dia
+    // (verificado contra a planilha real — 2023-03-01 virava 2023-02-28).
+    return new Date(bruto.getUTCFullYear(), bruto.getUTCMonth(), bruto.getUTCDate());
   }
   const n = Number(bruto);
   if (!Number.isFinite(n)) return null;
@@ -852,6 +958,18 @@ const COLUNAS = {
   categoria: 1, nome: 2, marca: 3, lote: 4, situacao: 5, local: 6,
   unidade: 7, validade: 8, eliminado: 16, origem: 17,
 } as const;
+
+// A coluna "Eliminados" NÃO vem como string: o ExcelJS entrega objeto de
+// fórmula, {formula:"TRUE()", result:true} ou {formula:"FALSE()"} sem result.
+// Comparar com a string "1" dava 0 eliminados em vez de 47.
+export const ehVerdadeiro = (v: unknown): boolean => {
+  if (typeof v === "boolean") return v;
+  if (v !== null && typeof v === "object" && "result" in v) {
+    return ehVerdadeiro((v as { result: unknown }).result);
+  }
+  const t = texto(v).toLowerCase();
+  return t === "1" || t === "true" || t === "verdadeiro";
+};
 
 const texto = (v: unknown): string => {
   if (v === null || v === undefined) return "";
@@ -881,7 +999,7 @@ export async function lerPlanilha(caminho: string): Promise<LinhaPlanilha[]> {
       quantidade: q.valor,
       unidade: q.unidade,
       validade: parseValidadeSerial(row.getCell(COLUNAS.validade).value as string | number | Date | null),
-      eliminado: texto(row.getCell(COLUNAS.eliminado).value) === "1",
+      eliminado: ehVerdadeiro(row.getCell(COLUNAS.eliminado).value),
       origem: texto(row.getCell(COLUNAS.origem).value),
       observacoes: "",
     });
@@ -893,19 +1011,24 @@ export async function lerPlanilha(caminho: string): Promise<LinhaPlanilha[]> {
 - [ ] **Step 5: Rodar e confirmar que passa**
 
 Run: `pnpm test planilha`
-Expected: PASS — 10 testes
+Expected: PASS — 16 testes
 
 - [ ] **Step 6: Conferir contra o arquivo real**
 
+`tsx -e` falha aqui com `Top-level await is currently not supported with the "cjs"
+output format`. Escreva um script temporário e apague depois:
+
 ```bash
-pnpm --filter server exec tsx -e "
-import { lerPlanilha } from './src/estoque/planilha.js';
-const l = await lerPlanilha(process.env.HOME + '/Downloads/Estoque Consolidado - Clínica Escola de Odontologia.xlsx');
-console.log('linhas:', l.length);
-console.log('com quantidade nula:', l.filter(x => x.quantidade === null).length);
-console.log('eliminados:', l.filter(x => x.eliminado).length);
-console.log('sem validade:', l.filter(x => !x.validade).length);
-"
+cat > apps/server/src/estoque/_verify.ts <<'EOF'
+import { lerPlanilha } from "./planilha.js";
+const l = await lerPlanilha(process.env.HOME + "/Downloads/Estoque Consolidado - Clínica Escola de Odontologia.xlsx");
+console.log("linhas:", l.length);
+console.log("com quantidade nula:", l.filter((x) => x.quantidade === null).length);
+console.log("eliminados:", l.filter((x) => x.eliminado).length);
+console.log("sem validade:", l.filter((x) => !x.validade).length);
+EOF
+pnpm --filter server exec tsx src/estoque/_verify.ts
+rm apps/server/src/estoque/_verify.ts
 ```
 
 Expected: `linhas: 388`, `com quantidade nula: 2`, `eliminados: 47`, `sem validade: 30`.
@@ -932,10 +1055,10 @@ Função pura que decide tudo — quais produtos existem, quais lotes ficam ativ
 **Interfaces:**
 - Consumes: `norm` (Task 2), `usarAte`/`classificar` (Task 3), `LinhaPlanilha` (Task 5)
 - Produces:
-  - `type ProdutoPlanejado = { nomeNorm: string; marcaNorm: string; nome: string; marca: string; especialidade: string; grafias: string[] }`
-  - `type LotePlanejado = { chaveProduto: string; lote: string; validade: Date | null; usarAte: Date | null; usarAteMotivo: string | null; local: string; quantidade: number; unidade: string; situacao: string | null; ativo: boolean; precisaConferencia: boolean; conferenciaMotivo: string[]; origem: string }`
+  - `type ProdutoPlanejado = { nomeNorm: string; marcaNorm: string; nome: string; marca: string; especialidade: string; especialidades: string[]; grafias: string[] }` — `especialidade` (singular) é a primeira vista e é o que vai para o banco; `especialidades` guarda todas, porque um material pode ser usado em mais de uma disciplina.
+  - `type LotePlanejado = { chaveProduto: string; lote: string; validade: Date | null; usarAte: Date | null; usarAteMotivo: string | null; local: string; quantidade: number; unidade: string; situacao: string | null; ativo: boolean; eliminado: boolean; precisaConferencia: boolean; conferenciaMotivo: string[]; origem: string }`
   - `type PlanoImportacao = { produtos: ProdutoPlanejado[]; lotes: LotePlanejado[]; locais: string[]; resumo: ResumoImportacao }`
-  - `type ResumoImportacao = { linhas: number; produtos: number; lotes: number; ativos: number; inativos: number; conferencia: number; vencidosComSaldo: number; armadilhas: number; fusoes: Array<{ de: string[]; para: string }> }`
+  - `type ResumoImportacao = { linhas: number; produtos: number; lotes: number; ativos: number; inativos: number; conferencia: number; vencidosComSaldo: number; prazoPassouComSaldo: number; armadilhas: number; fusoes: Array<{ de: string[]; para: string }>; especialidadesDivergentes: Array<{ produto: string; especialidades: string[] }> }`
   - `planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao`
   - `ESPECIALIDADES: Record<string, string>`
 
@@ -1117,6 +1240,13 @@ describe("planImport — resumo", () => {
     expect(p.resumo.vencidosComSaldo).toBe(1);
   });
 
+  it("nao mistura vencido com prazo morto no recesso", () => {
+    // 05/08/2026: rotulo ainda valido, mas o prazo util morreu em 29/07.
+    const p = planImport([linha({ validade: new Date(2026, 7, 5), quantidade: 5 })], new Date(2026, 7, 3));
+    expect(p.resumo.vencidosComSaldo).toBe(0);
+    expect(p.resumo.prazoPassouComSaldo).toBe(1);
+  });
+
   it("coleta os locais distintos", () => {
     const p = planImport(
       [linha({ local: "Sala A" }), linha({ local: "Sala B", lote: "2" }), linha({ local: "Sala A", lote: "3" })],
@@ -1161,6 +1291,7 @@ export type LotePlanejado = {
   unidade: string;
   situacao: string | null;
   ativo: boolean;
+  eliminado: boolean;
   precisaConferencia: boolean;
   conferenciaMotivo: string[];
   origem: string;
@@ -1174,7 +1305,9 @@ export type ResumoImportacao = {
   inativos: number;
   conferencia: number;
   vencidosComSaldo: number;
+  prazoPassouComSaldo: number;
   armadilhas: number;
+  especialidadesDivergentes: Array<{ produto: string; especialidades: string[] }>;
   fusoes: Array<{ de: string[]; para: string }>;
 };
 
@@ -1250,6 +1383,7 @@ export function planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao
       unidade: l.unidade,
       situacao: l.situacao === "aberto" || l.situacao === "fechado" ? l.situacao : null,
       ativo: qtd > 0 && !l.eliminado,
+      eliminado: l.eliminado,
       precisaConferencia: motivos.length > 0,
       conferenciaMotivo: motivos,
       origem: l.origem || "manual",
@@ -1274,10 +1408,13 @@ export function planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao
       inativos: lotes.length - ativos.length,
       conferencia: lotes.filter((x) => x.precisaConferencia).length,
       vencidosComSaldo: ativos.filter(
-        (x) => x.validade && classificar(x.validade, x.quantidade, hoje) === "vencido",
+        (x) => x.validade && classificar(x.validade, hoje) === "vencido",
+      ).length,
+      prazoPassouComSaldo: ativos.filter(
+        (x) => x.validade && classificar(x.validade, hoje) === "prazo_passou",
       ).length,
       armadilhas: ativos.filter(
-        (x) => x.validade && classificar(x.validade, x.quantidade, hoje) === "armadilha",
+        (x) => x.validade && classificar(x.validade, hoje) === "armadilha",
       ).length,
       fusoes,
     },
@@ -1288,20 +1425,29 @@ export function planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao
 - [ ] **Step 4: Rodar e confirmar que passa**
 
 Run: `pnpm test importPlan`
-Expected: PASS — 19 testes
+Expected: PASS — 23 testes
 
 - [ ] **Step 5: Conferir contra a planilha real**
 
+`tsx -e` falha aqui com `Top-level await is currently not supported with the "cjs"
+output format`. Escreva um script temporário e apague depois:
+
 ```bash
-pnpm --filter server exec tsx -e "
-import { lerPlanilha } from './src/estoque/planilha.js';
-import { planImport } from './src/estoque/importPlan.js';
-const l = await lerPlanilha(process.env.HOME + '/Downloads/Estoque Consolidado - Clínica Escola de Odontologia.xlsx');
+cat > apps/server/src/estoque/_verify.ts <<'EOF'
+import { lerPlanilha } from "./planilha.js";
+import { planImport } from "./importPlan.js";
+const l = await lerPlanilha(process.env.HOME + "/Downloads/Estoque Consolidado - Clínica Escola de Odontologia.xlsx");
 console.log(planImport(l, new Date(2026, 7, 10)).resumo);
-"
+EOF
+pnpm --filter server exec tsx src/estoque/_verify.ts
+rm apps/server/src/estoque/_verify.ts
 ```
 
-Expected: `linhas: 388`, `ativos: 215`, `inativos: 173`, `conferencia: 39`, `vencidosComSaldo: 9`, `armadilhas: 54`, e `produtos` entre 286 e 289.
+Expected: `linhas: 388`, `ativos: 215`, `inativos: 173`, `conferencia: 39`, `vencidosComSaldo: 9`, `prazoPassouComSaldo: 0`, `armadilhas: 54`, e `produtos: 288` — este é o número canônico do catálogo, medido contra os dados reais.
+
+`prazoPassouComSaldo` dá 0 hoje — foi medido nos dados reais. Não é sinal de que o
+contador está quebrado: nenhum lote está, neste momento, com o rótulo válido e o prazo
+útil já morto. Se der diferente de 0, investigue antes de seguir.
 
 O número exato de produtos é a saída canônica desta função — anote o valor obtido, porque é ele que a interface vai mostrar como "produtos no catálogo".
 
@@ -1368,8 +1514,9 @@ export async function applyImport(plano: PlanoImportacao, usuario: string): Prom
       await client.query(
         `insert into est_lotes
            (produto_id, lote, validade, usar_ate, usar_ate_motivo, local_id, quantidade,
-            unidade, situacao, precisa_conferencia, conferencia_motivo, origem)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+            unidade, situacao, precisa_conferencia, conferencia_motivo, origem,
+            eliminado_na_origem)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
         [
           idProduto.get(l.chaveProduto),
           l.lote || null,
@@ -1383,6 +1530,7 @@ export async function applyImport(plano: PlanoImportacao, usuario: string): Prom
           l.precisaConferencia,
           l.conferenciaMotivo,
           l.origem,
+          l.eliminado,
         ],
       );
     }
@@ -1430,7 +1578,7 @@ import { applyImport } from "./applyImport.js";
 
 const caminho = process.argv[2];
 if (!caminho) {
-  console.error("Uso: pnpm --filter server importar:estoque -- <caminho do .xlsx>");
+  console.error("Uso: pnpm --filter server importar:estoque <caminho do .xlsx>");
   process.exit(1);
 }
 
@@ -1460,12 +1608,23 @@ Lotes gravados ................... ${r.lotes}
 
 ATENÇÃO
 Vencidos ainda com saldo físico .. ${r.vencidosComSaldo}
+Prazo morreu no recesso .......... ${r.prazoPassouComSaldo}
 Armadilhas de recesso ............ ${r.armadilhas}
 Marcados para conferência (!) .... ${r.conferencia}
 
 Grafias unificadas ............... ${r.fusoes.length}`);
 
 for (const f of r.fusoes) console.log(`  ${f.de.join(" + ")} → ${f.para}`);
+
+if (r.especialidadesDivergentes.length) {
+  console.log(`
+Usados em mais de uma disciplina . ${r.especialidadesDivergentes.length}
+O banco guarda uma especialidade por produto — a primeira vista. Estes materiais
+aparecem em mais de uma, então filtrar por disciplina vai esconder alguns deles:`);
+  for (const d of r.especialidadesDivergentes) {
+    console.log(`  ${d.produto}: ${d.especialidades.join(" / ")}`);
+  }
+}
 
 console.log(`
 Nenhum lote e nenhuma validade foram alterados.
@@ -1486,7 +1645,7 @@ Modify `apps/server/package.json`, dentro de `"scripts"`, após `"migrate"`:
 - [ ] **Step 4: Rodar a importação de verdade**
 
 ```bash
-pnpm --filter server importar:estoque -- "$HOME/Downloads/Estoque Consolidado - Clínica Escola de Odontologia.xlsx"
+pnpm --filter server importar:estoque "$HOME/Downloads/Estoque Consolidado - Clínica Escola de Odontologia.xlsx"
 ```
 
 Expected: o relatório com `Linhas lidas: 388`, `ativos: 215`, `inativos: 173`, `Vencidos ainda com saldo físico: 9`, `Armadilhas de recesso: 54`, `Marcados para conferência: 39`.
@@ -1495,15 +1654,20 @@ Expected: o relatório com `Linhas lidas: 388`, `ativos: 215`, `inativos: 173`, 
 
 ```bash
 psql "$DATABASE_URL" -c "
-select count(*) filter (where quantidade > 0) as ativos,
+select count(*) filter (where quantidade > 0 and not eliminado_na_origem) as ativos,
+       count(*) filter (where quantidade > 0 and eliminado_na_origem) as eliminados_com_saldo,
        count(*) filter (where quantidade = 0) as zerados,
        count(*) filter (where precisa_conferencia) as a_conferir,
-       count(*) filter (where usar_ate < validade) as armadilhas,
+       count(*) filter (where quantidade > 0 and not eliminado_na_origem
+                          and usar_ate < validade and usar_ate >= current_date) as armadilhas,
        count(*) as total
 from est_lotes;"
 ```
 
-Expected: `total` 388, `a_conferir` 39, `armadilhas` 54.
+Expected: `total` 388, `ativos` 215, `eliminados_com_saldo` 5, `a_conferir` 39, `armadilhas` 54.
+
+A condição de armadilha precisa dos três filtros. Só `usar_ate < validade` dá 123, porque
+inclui lote zerado e lote cuja janela já passou — não é a definição de `classificar()`.
 
 - [ ] **Step 6: Conferir que nenhuma validade foi mexida**
 
@@ -1519,7 +1683,7 @@ Expected: 7 linhas, com as validades de 2036, 2050 (cinco) e 2051 intactas.
 - [ ] **Step 7: Rodar a suíte inteira**
 
 Run: `pnpm test`
-Expected: PASS — 56 testes (8 de `norm`, 19 de `recesso`, 10 de `planilha`, 19 de `importPlan`), nenhum falhando
+Expected: PASS — 69 testes (8 de `norm`, 19 de `recesso`, 16 de `planilha`, 26 de `importPlan`), nenhum falhando
 
 - [ ] **Step 8: Commit**
 

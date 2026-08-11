@@ -316,21 +316,32 @@ Toda ação aceita entra no audit log e é reversível.
 
 Fonte: aba `ESTOQUE COMPLETO`, 388 linhas.
 
-1. Criar produtos por `(nome_norm, marca_norm)` aplicando §4.4. O importador **deve emitir
-   a contagem final no relatório** em vez de assumir um número — as duas passadas de
-   prototipagem deram 286 e 288 por divergirem em pontuação virar espaço ou nada; §4.4 fixa
-   "nada".
+1. Criar produtos por `(nome_norm, marca_norm)` aplicando §4.4. **São 288 produtos** —
+   número medido contra os dados reais depois que a regra de §4.4 foi implementada e
+   testada. As duas passadas de prototipagem tinham dado 286 e 288 por divergirem em
+   pontuação virar espaço ou nada; §4.4 fixa "nada", e 288 é o resultado.
 2. Criar os 388 lotes. **Lote e validade entram exatamente como estão**, incluindo as
    validades de 2050 e 2051 — elas só recebem o `!`.
-3. Marcar `precisa_conferencia` em **39 linhas**. Os motivos somam mais que 39 porque 21
-   dessas linhas têm mais de um: sem validade com saldo positivo (28), sem local (23),
-   validade posterior a 2035 (7 — cinco em 2050, uma em 2036, uma em 2051), sem
-   quantidade (2). `conferencia_motivo` é array justamente por isso.
+3. Marcar `precisa_conferencia` em **53 linhas**. Os motivos somam mais que 53 porque
+   muitas linhas têm mais de um. `conferencia_motivo` é array justamente por isso:
+   sem validade com saldo positivo (28), sem local (23), validade posterior a 2035 (7 —
+   cinco em 2050, uma em 2036, uma em 2051), sem quantidade (2), **mesmo lote com
+   validades diferentes (8)** e **linha possivelmente duplicada (6)**.
+
+   Os dois últimos motivos vêm de uma pré-passada que compara as linhas entre si, e
+   foram descobertos na revisão final. O caso que os justifica: a tricresolformalina
+   lote 51224 aparece na planilha com validade 06/2026 numa linha e 06/2027 noutra, e a
+   unidade viva ficou gravada com a data mais generosa — o sistema responderia "no prazo"
+   para algo que pode estar vencido. §9 já exigia essa marcação para conflito entre
+   aparelhos; a mesma condição existia na planilha de origem desde o começo. Nada é
+   corrigido nem fundido: as duas linhas entram como estão, marcadas.
 4. 215 lotes ficam ativos (saldo > 0 e não eliminados). 173 ficam inativos mas íntegros — 166
    zerados e os eliminados. **Nada é excluído**: os zerados são exatamente o que alimenta
    a lista de compras (107 produtos com saldo 0 hoje).
-5. Aplicar as 11 fusões seguras de §10.1, registrando cada uma no audit log com
-   possibilidade de desfazer.
+5. Aplicar as fusões seguras de §10.1. São **3 eventos de fusão** registrados no audit
+   log, não 11: as 8 marcas colapsam em `marca_norm` mas caem em produtos distintos, então
+   não geram evento próprio. O registro atual não preenche `valor_antes`/`valor_depois`,
+   então ainda não há desfazer — fica para o Plano B.
 6. Os 9 lotes vencidos com estoque físico entram na fila de descarte, não são zerados
    sozinhos.
 
@@ -403,12 +414,15 @@ Toda impressão é registrada no audit log.
 | Fusão indevida de produtos | só fusão por `norm()` idêntica; tudo reversível via audit log |
 | Divergência de validade na sincronia | perdedor preservado no log + `!` no lote |
 | Saldo materializado divergir dos movimentos | job de reconciliação que recalcula e acusa |
+| `TRUNCATE` contorna trigger de linha | trigger `before truncate ... for each statement` na migration 0031 (o log só era protegido contra UPDATE/DELETE) |
+| App conecta como dono/superusuário do banco | **em aberto.** `ALTER TABLE ... DISABLE TRIGGER` seguido de `TRUNCATE` ainda zera o log, porque a `DATABASE_URL` usa o mesmo usuário que criou as tabelas. Fechar isso exige um role de conexão sem `ALTER`/`TRUNCATE`, separado do role de migration — mas isso muda a conexão de **todos** os módulos do segundo-cérebro, não só do estoque, e é decisão do Ricardo. Registrado, não corrigido. A mesma lacuna vale para `patient_audit_log`. |
 
 ## 16. Critérios de aceite
 
 1. Importar as 388 linhas sem alterar nenhum lote nem nenhuma validade, e emitir o
    relatório com as contagens.
-2. "Em estoque" mostra 215 lotes e "Comprar" mostra 107 produtos. Os 173 lotes mortos
+2. "Em estoque" mostra 215 lotes e "Comprar" mostra 111 produtos (eram 107 pelo critério
+   antigo, que ignorava `eliminado_na_origem`; os 4 a mais só têm saldo em lote já eliminado). Os 173 lotes mortos
    continuam no banco, íntegros, sem aparecer em nenhuma das duas listas.
 2b. Escanear a etiqueta de um lote já zerado encontra aquele lote e oferece dar entrada
    nele, em vez de criar um lote novo com o mesmo número.
