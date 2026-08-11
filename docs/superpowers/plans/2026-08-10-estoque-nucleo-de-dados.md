@@ -311,7 +311,7 @@ O coração do módulo. Função pura, sem banco, sem rede. É o que sabe que um
   - `type JanelaRecesso = { ultimoLetivo: { mes: number; dia: number }; volta: { mes: number; dia: number } }`
   - `CALENDARIO_PADRAO: CalendarioRecesso`
   - `usarAte(validade: Date, cal?: CalendarioRecesso): ResultadoUsarAte`
-  - `classificar(validade: Date | null, quantidade: number, hoje: Date, cal?: CalendarioRecesso): StatusLote`
+  - `classificar(validade: Date | null, hoje: Date, cal?: CalendarioRecesso): StatusLote`
   - `type StatusLote = "vencido" | "prazo_passou" | "armadilha" | "no_prazo" | "sem_validade"`
 
 - [ ] **Step 1: Escrever o teste que falha**
@@ -417,23 +417,25 @@ describe("classificar", () => {
   const hoje = d(2026, 8, 10);
 
   it("sem validade informada", () => {
-    expect(classificar(null, 5, hoje)).toBe("sem_validade");
+    expect(classificar(null, hoje)).toBe("sem_validade");
   });
 
   it("validade já passou", () => {
-    expect(classificar(d(2026, 8, 1), 5, hoje)).toBe("vencido");
+    expect(classificar(d(2026, 8, 1), hoje)).toBe("vencido");
   });
 
-  it("dentro da validade mas o prazo real já passou", () => {
-    expect(classificar(d(2026, 8, 5), 5, d(2026, 8, 3))).toBe("vencido");
+  it("validade impressa ainda no futuro, mas o prazo real morreu no recesso", () => {
+    // 05/08/2026 cai dentro do recesso de julho (30/07 a 10/08), entao o prazo
+    // util era 29/07. Em 03/08 o rotulo ainda diz que esta bom — nao e "vencido".
+    expect(classificar(d(2026, 8, 5), d(2026, 8, 3))).toBe("prazo_passou");
   });
 
   it("armadilha de recesso ainda no futuro", () => {
-    expect(classificar(d(2026, 12, 22), 5, hoje)).toBe("armadilha");
+    expect(classificar(d(2026, 12, 22), hoje)).toBe("armadilha");
   });
 
   it("no prazo", () => {
-    expect(classificar(d(2027, 6, 1), 5, hoje)).toBe("no_prazo");
+    expect(classificar(d(2027, 6, 1), hoje)).toBe("no_prazo");
   });
 });
 ```
@@ -484,10 +486,6 @@ export const CALENDARIO_PADRAO: CalendarioRecesso = {
 
 const dia = (ano: number, mes: number, d: number) => new Date(ano, mes - 1, d);
 
-function somaDias(base: Date, n: number): Date {
-  return dia(base.getFullYear(), base.getMonth() + 1, base.getDate() + n);
-}
-
 function diffDias(a: Date, b: Date): number {
   const ma = dia(a.getFullYear(), a.getMonth() + 1, a.getDate()).getTime();
   const mb = dia(b.getFullYear(), b.getMonth() + 1, b.getDate()).getTime();
@@ -526,16 +524,20 @@ export function usarAte(validade: Date, cal: CalendarioRecesso = CALENDARIO_PADR
   return { data: validade, motivo: "validade", diasPerdidos: 0 };
 }
 
+// "vencido" e "prazo_passou" NAO podem colapsar. Um lote cuja validade impressa
+// ainda nao chegou, mas cujo prazo util morreu no recesso, nao esta vencido: quem
+// conferir a caixa fisica vai ler uma data futura no rotulo. Chamar isso de
+// "vencido" contradiz o produto na mao do tecnico e destroi a confianca no
+// sistema — e mistura achado sanitario com achado operacional no mesmo numero.
 export function classificar(
   validade: Date | null,
-  quantidade: number,
   hoje: Date,
   cal: CalendarioRecesso = CALENDARIO_PADRAO,
 ): StatusLote {
   if (!validade) return "sem_validade";
   if (diffDias(validade, hoje) < 0) return "vencido";
   const r = usarAte(validade, cal);
-  if (diffDias(r.data, hoje) < 0) return "vencido";
+  if (diffDias(r.data, hoje) < 0) return "prazo_passou";
   return r.motivo === "validade" ? "no_prazo" : "armadilha";
 }
 ```
@@ -935,7 +937,7 @@ Função pura que decide tudo — quais produtos existem, quais lotes ficam ativ
   - `type ProdutoPlanejado = { nomeNorm: string; marcaNorm: string; nome: string; marca: string; especialidade: string; grafias: string[] }`
   - `type LotePlanejado = { chaveProduto: string; lote: string; validade: Date | null; usarAte: Date | null; usarAteMotivo: string | null; local: string; quantidade: number; unidade: string; situacao: string | null; ativo: boolean; precisaConferencia: boolean; conferenciaMotivo: string[]; origem: string }`
   - `type PlanoImportacao = { produtos: ProdutoPlanejado[]; lotes: LotePlanejado[]; locais: string[]; resumo: ResumoImportacao }`
-  - `type ResumoImportacao = { linhas: number; produtos: number; lotes: number; ativos: number; inativos: number; conferencia: number; vencidosComSaldo: number; armadilhas: number; fusoes: Array<{ de: string[]; para: string }> }`
+  - `type ResumoImportacao = { linhas: number; produtos: number; lotes: number; ativos: number; inativos: number; conferencia: number; vencidosComSaldo: number; prazoPassouComSaldo: number; armadilhas: number; fusoes: Array<{ de: string[]; para: string }> }`
   - `planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao`
   - `ESPECIALIDADES: Record<string, string>`
 
@@ -1117,6 +1119,13 @@ describe("planImport — resumo", () => {
     expect(p.resumo.vencidosComSaldo).toBe(1);
   });
 
+  it("nao mistura vencido com prazo morto no recesso", () => {
+    // 05/08/2026: rotulo ainda valido, mas o prazo util morreu em 29/07.
+    const p = planImport([linha({ validade: new Date(2026, 7, 5), quantidade: 5 })], new Date(2026, 7, 3));
+    expect(p.resumo.vencidosComSaldo).toBe(0);
+    expect(p.resumo.prazoPassouComSaldo).toBe(1);
+  });
+
   it("coleta os locais distintos", () => {
     const p = planImport(
       [linha({ local: "Sala A" }), linha({ local: "Sala B", lote: "2" }), linha({ local: "Sala A", lote: "3" })],
@@ -1174,6 +1183,7 @@ export type ResumoImportacao = {
   inativos: number;
   conferencia: number;
   vencidosComSaldo: number;
+  prazoPassouComSaldo: number;
   armadilhas: number;
   fusoes: Array<{ de: string[]; para: string }>;
 };
@@ -1274,10 +1284,13 @@ export function planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao
       inativos: lotes.length - ativos.length,
       conferencia: lotes.filter((x) => x.precisaConferencia).length,
       vencidosComSaldo: ativos.filter(
-        (x) => x.validade && classificar(x.validade, x.quantidade, hoje) === "vencido",
+        (x) => x.validade && classificar(x.validade, hoje) === "vencido",
+      ).length,
+      prazoPassouComSaldo: ativos.filter(
+        (x) => x.validade && classificar(x.validade, hoje) === "prazo_passou",
       ).length,
       armadilhas: ativos.filter(
-        (x) => x.validade && classificar(x.validade, x.quantidade, hoje) === "armadilha",
+        (x) => x.validade && classificar(x.validade, hoje) === "armadilha",
       ).length,
       fusoes,
     },
@@ -1288,7 +1301,7 @@ export function planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao
 - [ ] **Step 4: Rodar e confirmar que passa**
 
 Run: `pnpm test importPlan`
-Expected: PASS — 19 testes
+Expected: PASS — 20 testes
 
 - [ ] **Step 5: Conferir contra a planilha real**
 
@@ -1459,7 +1472,7 @@ Lotes gravados ................... ${r.lotes}
   inativos (preservados) ......... ${r.inativos}
 
 ATENÇÃO
-Vencidos ainda com saldo físico .. ${r.vencidosComSaldo}
+Vencidos ainda com saldo físico .. ${r.vencidosComSaldo}\nPrazo morreu no recesso .......... ${r.prazoPassouComSaldo}
 Armadilhas de recesso ............ ${r.armadilhas}
 Marcados para conferência (!) .... ${r.conferencia}
 
@@ -1519,7 +1532,7 @@ Expected: 7 linhas, com as validades de 2036, 2050 (cinco) e 2051 intactas.
 - [ ] **Step 7: Rodar a suíte inteira**
 
 Run: `pnpm test`
-Expected: PASS — 56 testes (8 de `norm`, 19 de `recesso`, 10 de `planilha`, 19 de `importPlan`), nenhum falhando
+Expected: PASS — 57 testes (8 de `norm`, 19 de `recesso`, 10 de `planilha`, 20 de `importPlan`), nenhum falhando
 
 - [ ] **Step 8: Commit**
 
