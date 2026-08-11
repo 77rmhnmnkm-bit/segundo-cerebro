@@ -46,7 +46,10 @@ describe("parseValidadeSerial", () => {
   });
 
   it("aceita Date já convertida pelo ExcelJS", () => {
-    expect(iso(parseValidadeSerial(new Date(2027, 2, 1) as unknown as number))).toBe("2027-03-01");
+    // Construída com Date.UTC porque é assim que o ExcelJS entrega — meia-noite
+    // UTC. Usar new Date(2027, 2, 1) aqui passava por acaso em UTC-3 e quebrava
+    // em fuso positivo, além de contradizer o contrato da função.
+    expect(iso(parseValidadeSerial(new Date(Date.UTC(2027, 2, 1))))).toBe("2027-03-01");
   });
 
   it("lê Date ancorada em meia-noite UTC (formato real do ExcelJS) sem recuar um dia", () => {
