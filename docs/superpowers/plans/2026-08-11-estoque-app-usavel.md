@@ -327,8 +327,8 @@ Expected: PASS — 5 testes
 Suba o servidor (`pnpm dev:server`) e, com `DEV_SKIP_AUTH=true` no `apps/server/.env`, obtenha um token pelo `/auth/dev-bypass` e chame:
 
 ```bash
-TOKEN=$(curl -s -X POST localhost:3333/auth/dev-bypass | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
-curl -s localhost:3333/estoque/contagens -H "Authorization: Bearer $TOKEN"
+TOKEN=$(curl -s -X POST localhost:4000/auth/dev-bypass | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+curl -s localhost:4000/estoque/contagens -H "Authorization: Bearer $TOKEN"
 ```
 
 Expected: `{"estoque":215,"validade":54,"comprar":111,"conferencia":53}`
