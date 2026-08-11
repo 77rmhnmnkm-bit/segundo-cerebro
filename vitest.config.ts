@@ -1,9 +1,9 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 
 export default defineConfig({
   test: {
     include: ["apps/**/*.test.ts", "packages/**/*.test.ts"],
-    exclude: ["**/node_modules/**", "**/dist/**", "**/ml-venv/**"],
+    exclude: [...configDefaults.exclude, "**/ml-venv/**"],
     environment: "node",
   },
 });

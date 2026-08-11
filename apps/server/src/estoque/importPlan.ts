@@ -30,6 +30,7 @@ export type LotePlanejado = {
   precisaConferencia: boolean;
   conferenciaMotivo: string[];
   origem: string;
+  observacoes: string;
 };
 
 export type ResumoImportacao = {
@@ -79,10 +80,66 @@ export const ESPECIALIDADES: Record<string, string> = {
 
 const ANO_IMPLAUSIVEL = 2035;
 
+// Preenchimento de planilha, não identificador de lote: repetir "NC" ou "—"
+// em várias linhas não quer dizer que é o mesmo lote físico.
+const LOTE_SEM_IDENTIDADE = new Set(["", "NC", "—"]);
+
 export function planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao {
   const produtos = new Map<string, ProdutoPlanejado>();
   const lotes: LotePlanejado[] = [];
   const locais = new Set<string>();
+
+  // Pré-passada: o laço principal abaixo nunca compara uma linha com outra,
+  // então dois lotes com o mesmo número e validades diferentes entravam sem
+  // marcação nenhuma — caso real: tricresolformalina lote 51224 com validade
+  // 2026-06-01 numa linha e 2027-06-01 noutra, a unidade viva gravada como
+  // válida até 2027. Agrupamos por (chaveProduto, lote) — o mesmo par que o
+  // laço principal usa para identidade de produto — e marcamos o grupo todo
+  // quando as validades divergem ou quando duas linhas do grupo são cópia
+  // exata uma da outra. Isto NUNCA funde lote, NUNCA altera validade e NUNCA
+  // remove linha: só acrescenta motivo de conferência.
+  const grupos = new Map<string, LinhaPlanilha[]>();
+  for (const l of linhas) {
+    const loteTrim = (l.lote ?? "").trim();
+    if (LOTE_SEM_IDENTIDADE.has(loteTrim)) continue;
+    const chaveGrupo = `${norm(l.nome)}|${norm(l.marca)}|${loteTrim}`;
+    const grupo = grupos.get(chaveGrupo) ?? [];
+    grupo.push(l);
+    grupos.set(chaveGrupo, grupo);
+  }
+
+  // Motivos extras por linha, calculados na pré-passada e aplicados no laço
+  // principal. A chave é a própria referência da linha (cada elemento de
+  // `linhas` é um objeto distinto), o que funciona mesmo quando duas linhas
+  // são estruturalmente idênticas — é exatamente o caso de "linha
+  // possivelmente duplicada".
+  const motivosExtras = new Map<LinhaPlanilha, Set<string>>();
+  const acrescentarMotivoExtra = (l: LinhaPlanilha, motivo: string): void => {
+    const s = motivosExtras.get(l) ?? new Set<string>();
+    s.add(motivo);
+    motivosExtras.set(l, s);
+  };
+
+  for (const grupo of grupos.values()) {
+    if (grupo.length < 2) continue;
+
+    const validadesDoGrupo = new Set(grupo.map((l) => (l.validade ? l.validade.getTime() : null)));
+    if (validadesDoGrupo.size > 1) {
+      for (const l of grupo) acrescentarMotivoExtra(l, "mesmo lote com validades diferentes");
+    }
+
+    for (let i = 0; i < grupo.length; i++) {
+      for (let j = i + 1; j < grupo.length; j++) {
+        const a = grupo[i];
+        const b = grupo[j];
+        const mesmaValidade = (a.validade ? a.validade.getTime() : null) === (b.validade ? b.validade.getTime() : null);
+        if (mesmaValidade && a.local === b.local && a.situacao === b.situacao && a.quantidade === b.quantidade) {
+          acrescentarMotivoExtra(a, "linha possivelmente duplicada");
+          acrescentarMotivoExtra(b, "linha possivelmente duplicada");
+        }
+      }
+    }
+  }
 
   for (const l of linhas) {
     const nomeNorm = norm(l.nome);
@@ -115,6 +172,7 @@ export function planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao
     if (l.validade && l.validade.getFullYear() > ANO_IMPLAUSIVEL) motivos.push("validade implausível");
     const qtd = l.quantidade ?? 0;
     if (!l.validade && qtd > 0) motivos.push("sem validade");
+    for (const motivo of motivosExtras.get(l) ?? []) motivos.push(motivo);
 
     const r = l.validade ? usarAte(l.validade, CALENDARIO_PADRAO) : null;
 
@@ -133,6 +191,7 @@ export function planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao
       precisaConferencia: motivos.length > 0,
       conferenciaMotivo: motivos,
       origem: l.origem || "manual",
+      observacoes: l.observacoes,
     });
   }
 

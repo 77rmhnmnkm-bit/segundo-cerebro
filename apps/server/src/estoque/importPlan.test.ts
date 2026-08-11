@@ -219,6 +219,83 @@ describe("planImport — especialidades divergentes", () => {
   });
 });
 
+describe("planImport — mesmo lote comparado entre linhas", () => {
+  it("duas linhas com mesmo produto e lote mas validades diferentes recebem o motivo nas duas", () => {
+    const p = planImport(
+      [
+        linha({ lote: "51224", validade: new Date(2026, 5, 1) }),
+        linha({ lote: "51224", validade: new Date(2027, 5, 1) }),
+      ],
+      HOJE,
+    );
+    expect(p.lotes[0].conferenciaMotivo).toContain("mesmo lote com validades diferentes");
+    expect(p.lotes[1].conferenciaMotivo).toContain("mesmo lote com validades diferentes");
+    expect(p.lotes[0].precisaConferencia).toBe(true);
+    expect(p.lotes[1].precisaConferencia).toBe(true);
+    // Restrição inviolável: a validade de cada linha não é tocada.
+    expect(p.lotes[0].validade).toEqual(new Date(2026, 5, 1));
+    expect(p.lotes[1].validade).toEqual(new Date(2027, 5, 1));
+  });
+
+  it("duas linhas idênticas (produto, lote, validade, local, situação e quantidade) recebem o motivo de duplicata", () => {
+    const p = planImport(
+      [linha({ lote: "7407" }), linha({ lote: "7407" })],
+      HOJE,
+    );
+    expect(p.lotes[0].conferenciaMotivo).toContain("linha possivelmente duplicada");
+    expect(p.lotes[1].conferenciaMotivo).toContain("linha possivelmente duplicada");
+    expect(p.lotes).toHaveLength(2); // nada é removido
+  });
+
+  it("duas linhas com mesmo produto mas lotes diferentes não recebem nenhum dos dois motivos", () => {
+    const p = planImport(
+      [
+        linha({ lote: "1", validade: new Date(2026, 5, 1) }),
+        linha({ lote: "2", validade: new Date(2027, 5, 1) }),
+      ],
+      HOJE,
+    );
+    expect(p.lotes[0].conferenciaMotivo).not.toContain("mesmo lote com validades diferentes");
+    expect(p.lotes[0].conferenciaMotivo).not.toContain("linha possivelmente duplicada");
+    expect(p.lotes[1].conferenciaMotivo).not.toContain("mesmo lote com validades diferentes");
+    expect(p.lotes[1].conferenciaMotivo).not.toContain("linha possivelmente duplicada");
+  });
+
+  it('lote "NC" repetido não dispara nenhum motivo — é preenchimento, não identidade', () => {
+    const p = planImport(
+      [
+        linha({ lote: "NC", validade: new Date(2026, 5, 1) }),
+        linha({ lote: "NC", validade: new Date(2027, 5, 1) }),
+      ],
+      HOJE,
+    );
+    expect(p.lotes[0].conferenciaMotivo).not.toContain("mesmo lote com validades diferentes");
+    expect(p.lotes[1].conferenciaMotivo).not.toContain("mesmo lote com validades diferentes");
+  });
+
+  it("uma linha isolada (lote sem repetição) continua sem os novos motivos", () => {
+    const l = planImport([linha({ lote: "384480" })], HOJE).lotes[0];
+    expect(l.conferenciaMotivo).not.toContain("mesmo lote com validades diferentes");
+    expect(l.conferenciaMotivo).not.toContain("linha possivelmente duplicada");
+    expect(l.precisaConferencia).toBe(false);
+  });
+});
+
+describe("planImport — observações sanitárias", () => {
+  it("propaga o texto da observação da linha para o lote planejado, intacto", () => {
+    const l = planImport(
+      [linha({ observacoes: "Fabricação 13/11/2025. 20 unidades por caixa." })],
+      HOJE,
+    ).lotes[0];
+    expect(l.observacoes).toBe("Fabricação 13/11/2025. 20 unidades por caixa.");
+  });
+
+  it("linha sem observação chega com string vazia, não undefined", () => {
+    const l = planImport([linha({ observacoes: "" })], HOJE).lotes[0];
+    expect(l.observacoes).toBe("");
+  });
+});
+
 describe("planImport — resumo", () => {
   it("conta vencidos com saldo separadamente", () => {
     const p = planImport(

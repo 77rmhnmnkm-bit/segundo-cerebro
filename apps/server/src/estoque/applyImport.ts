@@ -12,7 +12,9 @@ export async function applyImport(plano: PlanoImportacao, usuario: string): Prom
     const idLocal = new Map<string, string>();
     for (const nome of plano.locais) {
       const r = await client.query<{ id: string }>(
-        "insert into est_locais (nome, nivel) values ($1, 'sala') returning id",
+        `insert into est_locais (nome, nivel) values ($1, 'sala')
+         on conflict (nome) do update set nome = est_locais.nome
+         returning id`,
         [nome],
       );
       idLocal.set(nome, r.rows[0].id);
@@ -34,8 +36,9 @@ export async function applyImport(plano: PlanoImportacao, usuario: string): Prom
       await client.query(
         `insert into est_lotes
            (produto_id, lote, validade, usar_ate, usar_ate_motivo, local_id, quantidade,
-            unidade, situacao, precisa_conferencia, conferencia_motivo, origem, eliminado_na_origem)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+            unidade, situacao, precisa_conferencia, conferencia_motivo, origem, eliminado_na_origem,
+            observacoes)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [
           idProduto.get(l.chaveProduto),
           l.lote || null,
@@ -50,6 +53,7 @@ export async function applyImport(plano: PlanoImportacao, usuario: string): Prom
           l.conferenciaMotivo,
           l.origem,
           l.eliminado,
+          l.observacoes || null,
         ],
       );
     }

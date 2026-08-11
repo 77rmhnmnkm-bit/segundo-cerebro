@@ -64,7 +64,7 @@ export function parseValidadeSerial(bruto: string | number | Date | null): Date 
 
 const COLUNAS = {
   categoria: 1, nome: 2, marca: 3, lote: 4, situacao: 5, local: 6,
-  unidade: 7, validade: 8, eliminado: 16, origem: 17,
+  unidade: 7, validade: 8, observacoes: 15, eliminado: 16, origem: 17,
 } as const;
 
 const texto = (v: unknown): string => {
@@ -112,7 +112,7 @@ export async function lerPlanilha(caminho: string): Promise<LinhaPlanilha[]> {
       validade: parseValidadeSerial(row.getCell(COLUNAS.validade).value as string | number | Date | null),
       eliminado: ehVerdadeiro(row.getCell(COLUNAS.eliminado).value),
       origem: texto(row.getCell(COLUNAS.origem).value),
-      observacoes: "",
+      observacoes: texto(row.getCell(COLUNAS.observacoes).value),
     });
   });
   return linhas;
