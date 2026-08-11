@@ -39,7 +39,8 @@ type ColorKey = "categoryAtendimento" | "categoryPessoal" | "categoryAcademico" 
 const MODULES: { id: string; name: string; subtitle: string; color: ColorKey; path: string }[] = [
   { id: "mod:pacientes", name: "Pacientes", subtitle: "Prontuário, arquivos, negatoscópio", color: "categoryAtendimento", path: "/pacientes" },
   { id: "mod:agenda", name: "Agenda", subtitle: "Compromissos com classificação por IA", color: "categoryPessoal", path: "/agenda" },
-  { id: "mod:estoque", name: "Estoque", subtitle: "Materiais, instrumentais e validade", color: "categoryAcademico", path: "/estoque" },
+  { id: "mod:estoque", name: "Estoque da Clínica", subtitle: "Lotes, prazo real e conferência", color: "categoryAcademico", path: "/estoque" },
+  { id: "mod:estoque-pessoal", name: "Estoque pessoal", subtitle: "Seus materiais e lista de desejos", color: "categoryPessoal", path: "/estoque-pessoal" },
   { id: "mod:biblioteca", name: "Biblioteca", subtitle: "Procedimentos, calculadoras e orientações", color: "primary", path: "/biblioteca" },
   { id: "mod:financeiro", name: "Financeiro", subtitle: "Pagamentos, recibos e pendências", color: "categoryAtendimento", path: "/financeiro" },
   { id: "mod:esterilizacao", name: "Esterilização", subtitle: "Ciclos e indicador biológico", color: "categoryAcademico", path: "/esterilizacao" },
