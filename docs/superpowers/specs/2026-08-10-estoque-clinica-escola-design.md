@@ -316,10 +316,10 @@ Toda ação aceita entra no audit log e é reversível.
 
 Fonte: aba `ESTOQUE COMPLETO`, 388 linhas.
 
-1. Criar produtos por `(nome_norm, marca_norm)` aplicando §4.4. O importador **deve emitir
-   a contagem final no relatório** em vez de assumir um número — as duas passadas de
-   prototipagem deram 286 e 288 por divergirem em pontuação virar espaço ou nada; §4.4 fixa
-   "nada".
+1. Criar produtos por `(nome_norm, marca_norm)` aplicando §4.4. **São 288 produtos** —
+   número medido contra os dados reais depois que a regra de §4.4 foi implementada e
+   testada. As duas passadas de prototipagem tinham dado 286 e 288 por divergirem em
+   pontuação virar espaço ou nada; §4.4 fixa "nada", e 288 é o resultado.
 2. Criar os 388 lotes. **Lote e validade entram exatamente como estão**, incluindo as
    validades de 2050 e 2051 — elas só recebem o `!`.
 3. Marcar `precisa_conferencia` em **39 linhas**. Os motivos somam mais que 39 porque 21

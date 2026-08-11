@@ -1015,15 +1015,20 @@ Expected: PASS — 16 testes
 
 - [ ] **Step 6: Conferir contra o arquivo real**
 
+`tsx -e` falha aqui com `Top-level await is currently not supported with the "cjs"
+output format`. Escreva um script temporário e apague depois:
+
 ```bash
-pnpm --filter server exec tsx -e "
-import { lerPlanilha } from './src/estoque/planilha.js';
-const l = await lerPlanilha(process.env.HOME + '/Downloads/Estoque Consolidado - Clínica Escola de Odontologia.xlsx');
-console.log('linhas:', l.length);
-console.log('com quantidade nula:', l.filter(x => x.quantidade === null).length);
-console.log('eliminados:', l.filter(x => x.eliminado).length);
-console.log('sem validade:', l.filter(x => !x.validade).length);
-"
+cat > apps/server/src/estoque/_verify.ts <<'EOF'
+import { lerPlanilha } from "./planilha.js";
+const l = await lerPlanilha(process.env.HOME + "/Downloads/Estoque Consolidado - Clínica Escola de Odontologia.xlsx");
+console.log("linhas:", l.length);
+console.log("com quantidade nula:", l.filter((x) => x.quantidade === null).length);
+console.log("eliminados:", l.filter((x) => x.eliminado).length);
+console.log("sem validade:", l.filter((x) => !x.validade).length);
+EOF
+pnpm --filter server exec tsx src/estoque/_verify.ts
+rm apps/server/src/estoque/_verify.ts
 ```
 
 Expected: `linhas: 388`, `com quantidade nula: 2`, `eliminados: 47`, `sem validade: 30`.
@@ -1421,16 +1426,21 @@ Expected: PASS — 20 testes
 
 - [ ] **Step 5: Conferir contra a planilha real**
 
+`tsx -e` falha aqui com `Top-level await is currently not supported with the "cjs"
+output format`. Escreva um script temporário e apague depois:
+
 ```bash
-pnpm --filter server exec tsx -e "
-import { lerPlanilha } from './src/estoque/planilha.js';
-import { planImport } from './src/estoque/importPlan.js';
-const l = await lerPlanilha(process.env.HOME + '/Downloads/Estoque Consolidado - Clínica Escola de Odontologia.xlsx');
+cat > apps/server/src/estoque/_verify.ts <<'EOF'
+import { lerPlanilha } from "./planilha.js";
+import { planImport } from "./importPlan.js";
+const l = await lerPlanilha(process.env.HOME + "/Downloads/Estoque Consolidado - Clínica Escola de Odontologia.xlsx");
 console.log(planImport(l, new Date(2026, 7, 10)).resumo);
-"
+EOF
+pnpm --filter server exec tsx src/estoque/_verify.ts
+rm apps/server/src/estoque/_verify.ts
 ```
 
-Expected: `linhas: 388`, `ativos: 215`, `inativos: 173`, `conferencia: 39`, `vencidosComSaldo: 9`, `prazoPassouComSaldo: 0`, `armadilhas: 54`, e `produtos` entre 286 e 289.
+Expected: `linhas: 388`, `ativos: 215`, `inativos: 173`, `conferencia: 39`, `vencidosComSaldo: 9`, `prazoPassouComSaldo: 0`, `armadilhas: 54`, e `produtos: 288` — este é o número canônico do catálogo, medido contra os dados reais.
 
 `prazoPassouComSaldo` dá 0 hoje — foi medido nos dados reais. Não é sinal de que o
 contador está quebrado: nenhum lote está, neste momento, com o rótulo válido e o prazo
