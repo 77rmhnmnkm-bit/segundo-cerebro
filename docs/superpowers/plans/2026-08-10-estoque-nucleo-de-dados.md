@@ -1314,7 +1314,11 @@ console.log(planImport(l, new Date(2026, 7, 10)).resumo);
 "
 ```
 
-Expected: `linhas: 388`, `ativos: 215`, `inativos: 173`, `conferencia: 39`, `vencidosComSaldo: 9`, `armadilhas: 54`, e `produtos` entre 286 e 289.
+Expected: `linhas: 388`, `ativos: 215`, `inativos: 173`, `conferencia: 39`, `vencidosComSaldo: 9`, `prazoPassouComSaldo: 0`, `armadilhas: 54`, e `produtos` entre 286 e 289.
+
+`prazoPassouComSaldo` dá 0 hoje — foi medido nos dados reais. Não é sinal de que o
+contador está quebrado: nenhum lote está, neste momento, com o rótulo válido e o prazo
+útil já morto. Se der diferente de 0, investigue antes de seguir.
 
 O número exato de produtos é a saída canônica desta função — anote o valor obtido, porque é ele que a interface vai mostrar como "produtos no catálogo".
 
@@ -1472,7 +1476,8 @@ Lotes gravados ................... ${r.lotes}
   inativos (preservados) ......... ${r.inativos}
 
 ATENÇÃO
-Vencidos ainda com saldo físico .. ${r.vencidosComSaldo}\nPrazo morreu no recesso .......... ${r.prazoPassouComSaldo}
+Vencidos ainda com saldo físico .. ${r.vencidosComSaldo}
+Prazo morreu no recesso .......... ${r.prazoPassouComSaldo}
 Armadilhas de recesso ............ ${r.armadilhas}
 Marcados para conferência (!) .... ${r.conferencia}
 
