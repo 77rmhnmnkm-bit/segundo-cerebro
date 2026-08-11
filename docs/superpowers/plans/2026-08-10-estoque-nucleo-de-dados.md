@@ -1055,10 +1055,10 @@ Função pura que decide tudo — quais produtos existem, quais lotes ficam ativ
 **Interfaces:**
 - Consumes: `norm` (Task 2), `usarAte`/`classificar` (Task 3), `LinhaPlanilha` (Task 5)
 - Produces:
-  - `type ProdutoPlanejado = { nomeNorm: string; marcaNorm: string; nome: string; marca: string; especialidade: string; grafias: string[] }`
+  - `type ProdutoPlanejado = { nomeNorm: string; marcaNorm: string; nome: string; marca: string; especialidade: string; especialidades: string[]; grafias: string[] }` — `especialidade` (singular) é a primeira vista e é o que vai para o banco; `especialidades` guarda todas, porque um material pode ser usado em mais de uma disciplina.
   - `type LotePlanejado = { chaveProduto: string; lote: string; validade: Date | null; usarAte: Date | null; usarAteMotivo: string | null; local: string; quantidade: number; unidade: string; situacao: string | null; ativo: boolean; precisaConferencia: boolean; conferenciaMotivo: string[]; origem: string }`
   - `type PlanoImportacao = { produtos: ProdutoPlanejado[]; lotes: LotePlanejado[]; locais: string[]; resumo: ResumoImportacao }`
-  - `type ResumoImportacao = { linhas: number; produtos: number; lotes: number; ativos: number; inativos: number; conferencia: number; vencidosComSaldo: number; prazoPassouComSaldo: number; armadilhas: number; fusoes: Array<{ de: string[]; para: string }> }`
+  - `type ResumoImportacao = { linhas: number; produtos: number; lotes: number; ativos: number; inativos: number; conferencia: number; vencidosComSaldo: number; prazoPassouComSaldo: number; armadilhas: number; fusoes: Array<{ de: string[]; para: string }>; especialidadesDivergentes: Array<{ produto: string; especialidades: string[] }> }`
   - `planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao`
   - `ESPECIALIDADES: Record<string, string>`
 
