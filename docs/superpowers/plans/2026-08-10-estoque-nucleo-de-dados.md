@@ -1056,7 +1056,7 @@ Função pura que decide tudo — quais produtos existem, quais lotes ficam ativ
 - Consumes: `norm` (Task 2), `usarAte`/`classificar` (Task 3), `LinhaPlanilha` (Task 5)
 - Produces:
   - `type ProdutoPlanejado = { nomeNorm: string; marcaNorm: string; nome: string; marca: string; especialidade: string; especialidades: string[]; grafias: string[] }` — `especialidade` (singular) é a primeira vista e é o que vai para o banco; `especialidades` guarda todas, porque um material pode ser usado em mais de uma disciplina.
-  - `type LotePlanejado = { chaveProduto: string; lote: string; validade: Date | null; usarAte: Date | null; usarAteMotivo: string | null; local: string; quantidade: number; unidade: string; situacao: string | null; ativo: boolean; precisaConferencia: boolean; conferenciaMotivo: string[]; origem: string }`
+  - `type LotePlanejado = { chaveProduto: string; lote: string; validade: Date | null; usarAte: Date | null; usarAteMotivo: string | null; local: string; quantidade: number; unidade: string; situacao: string | null; ativo: boolean; eliminado: boolean; precisaConferencia: boolean; conferenciaMotivo: string[]; origem: string }`
   - `type PlanoImportacao = { produtos: ProdutoPlanejado[]; lotes: LotePlanejado[]; locais: string[]; resumo: ResumoImportacao }`
   - `type ResumoImportacao = { linhas: number; produtos: number; lotes: number; ativos: number; inativos: number; conferencia: number; vencidosComSaldo: number; prazoPassouComSaldo: number; armadilhas: number; fusoes: Array<{ de: string[]; para: string }>; especialidadesDivergentes: Array<{ produto: string; especialidades: string[] }> }`
   - `planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao`
@@ -1291,6 +1291,7 @@ export type LotePlanejado = {
   unidade: string;
   situacao: string | null;
   ativo: boolean;
+  eliminado: boolean;
   precisaConferencia: boolean;
   conferenciaMotivo: string[];
   origem: string;
@@ -1382,6 +1383,7 @@ export function planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao
       unidade: l.unidade,
       situacao: l.situacao === "aberto" || l.situacao === "fechado" ? l.situacao : null,
       ativo: qtd > 0 && !l.eliminado,
+      eliminado: l.eliminado,
       precisaConferencia: motivos.length > 0,
       conferenciaMotivo: motivos,
       origem: l.origem || "manual",
@@ -1512,8 +1514,9 @@ export async function applyImport(plano: PlanoImportacao, usuario: string): Prom
       await client.query(
         `insert into est_lotes
            (produto_id, lote, validade, usar_ate, usar_ate_motivo, local_id, quantidade,
-            unidade, situacao, precisa_conferencia, conferencia_motivo, origem)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+            unidade, situacao, precisa_conferencia, conferencia_motivo, origem,
+            eliminado_na_origem)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
         [
           idProduto.get(l.chaveProduto),
           l.lote || null,
@@ -1527,6 +1530,7 @@ export async function applyImport(plano: PlanoImportacao, usuario: string): Prom
           l.precisaConferencia,
           l.conferenciaMotivo,
           l.origem,
+          l.eliminado,
         ],
       );
     }
@@ -1574,7 +1578,7 @@ import { applyImport } from "./applyImport.js";
 
 const caminho = process.argv[2];
 if (!caminho) {
-  console.error("Uso: pnpm --filter server importar:estoque -- <caminho do .xlsx>");
+  console.error("Uso: pnpm --filter server importar:estoque <caminho do .xlsx>");
   process.exit(1);
 }
 
@@ -1641,7 +1645,7 @@ Modify `apps/server/package.json`, dentro de `"scripts"`, após `"migrate"`:
 - [ ] **Step 4: Rodar a importação de verdade**
 
 ```bash
-pnpm --filter server importar:estoque -- "$HOME/Downloads/Estoque Consolidado - Clínica Escola de Odontologia.xlsx"
+pnpm --filter server importar:estoque "$HOME/Downloads/Estoque Consolidado - Clínica Escola de Odontologia.xlsx"
 ```
 
 Expected: o relatório com `Linhas lidas: 388`, `ativos: 215`, `inativos: 173`, `Vencidos ainda com saldo físico: 9`, `Armadilhas de recesso: 54`, `Marcados para conferência: 39`.
@@ -1650,15 +1654,20 @@ Expected: o relatório com `Linhas lidas: 388`, `ativos: 215`, `inativos: 173`, 
 
 ```bash
 psql "$DATABASE_URL" -c "
-select count(*) filter (where quantidade > 0) as ativos,
+select count(*) filter (where quantidade > 0 and not eliminado_na_origem) as ativos,
+       count(*) filter (where quantidade > 0 and eliminado_na_origem) as eliminados_com_saldo,
        count(*) filter (where quantidade = 0) as zerados,
        count(*) filter (where precisa_conferencia) as a_conferir,
-       count(*) filter (where usar_ate < validade) as armadilhas,
+       count(*) filter (where quantidade > 0 and not eliminado_na_origem
+                          and usar_ate < validade and usar_ate >= current_date) as armadilhas,
        count(*) as total
 from est_lotes;"
 ```
 
-Expected: `total` 388, `a_conferir` 39, `armadilhas` 54.
+Expected: `total` 388, `ativos` 215, `eliminados_com_saldo` 5, `a_conferir` 39, `armadilhas` 54.
+
+A condição de armadilha precisa dos três filtros. Só `usar_ate < validade` dá 123, porque
+inclui lote zerado e lote cuja janela já passou — não é a definição de `classificar()`.
 
 - [ ] **Step 6: Conferir que nenhuma validade foi mexida**
 
@@ -1674,7 +1683,7 @@ Expected: 7 linhas, com as validades de 2036, 2050 (cinco) e 2051 intactas.
 - [ ] **Step 7: Rodar a suíte inteira**
 
 Run: `pnpm test`
-Expected: PASS — 66 testes (8 de `norm`, 19 de `recesso`, 16 de `planilha`, 23 de `importPlan`), nenhum falhando
+Expected: PASS — 69 testes (8 de `norm`, 19 de `recesso`, 16 de `planilha`, 26 de `importPlan`), nenhum falhando
 
 - [ ] **Step 8: Commit**
 
