@@ -19,6 +19,7 @@ import { habitsRoutes } from "./routes/habits.js";
 import { knowledgeRoutes } from "./routes/knowledge.js";
 import { trainingRoutes } from "./routes/training.js";
 import { sterilizationRoutes } from "./routes/sterilization.js";
+import { estoqueRoutes } from "./routes/estoque.js";
 import { UPLOADS_DIR } from "./uploads.js";
 
 const app = Fastify({ logger: true });
@@ -44,6 +45,7 @@ await app.register(habitsRoutes);
 await app.register(knowledgeRoutes);
 await app.register(trainingRoutes);
 await app.register(sterilizationRoutes);
+await app.register(estoqueRoutes);
 
 app.get("/health", async () => ({ status: "ok" }));
 
