@@ -856,6 +856,12 @@ describe("parseValidadeSerial", () => {
   it("aceita Date já convertida pelo ExcelJS", () => {
     expect(iso(parseValidadeSerial(new Date(2027, 2, 1) as unknown as number))).toBe("2027-03-01");
   });
+
+  it("Date ancorada em meia-noite UTC devolve o mesmo dia-calendário", () => {
+    // O ExcelJS entrega assim. Ler com getters LOCAIS em UTC-3 daria
+    // 2023-02-28 — foi o bug real, em 358 de 358 linhas da planilha.
+    expect(iso(parseValidadeSerial(new Date(Date.UTC(2023, 2, 1))))).toBe("2023-03-01");
+  });
 });
 ```
 
@@ -904,10 +910,17 @@ export function parseQuantidade(bruto: string): { valor: number | null; unidade:
 // em UTC-3.
 const EPOCH_EXCEL = Date.UTC(1899, 11, 30);
 
+// CONTRATO: o parâmetro Date só é válido ancorado em meia-noite UTC, que é o
+// que o ExcelJS entrega. Uma Date construída com componentes locais às 21h ou
+// mais tarde (UTC-3) seria lida como o dia seguinte — construa com Date.UTC()
+// antes de passar. A ambiguidade é irresolúvel a partir do valor.
 export function parseValidadeSerial(bruto: string | number | Date | null): Date | null {
   if (bruto === null || bruto === undefined || bruto === "") return null;
   if (bruto instanceof Date) {
-    return new Date(bruto.getFullYear(), bruto.getMonth(), bruto.getDate());
+    // Getters UTC, não locais: o ExcelJS ancora em meia-noite UTC e ler com
+    // getters locais em UTC-3 recuava TODAS as 358 validades em um dia
+    // (verificado contra a planilha real — 2023-03-01 virava 2023-02-28).
+    return new Date(bruto.getUTCFullYear(), bruto.getUTCMonth(), bruto.getUTCDate());
   }
   const n = Number(bruto);
   if (!Number.isFinite(n)) return null;
@@ -919,6 +932,16 @@ const COLUNAS = {
   categoria: 1, nome: 2, marca: 3, lote: 4, situacao: 5, local: 6,
   unidade: 7, validade: 8, eliminado: 16, origem: 17,
 } as const;
+
+// A coluna "Eliminados" NÃO vem como string: o ExcelJS entrega objeto de
+// fórmula, {formula:"TRUE()", result:true} ou {formula:"FALSE()"} sem result.
+// Comparar com a string "1" dava 0 eliminados em vez de 47.
+export const ehVerdadeiro = (v: unknown): boolean => {
+  if (v === null || v === undefined) return false;
+  if (typeof v === "boolean") return v;
+  if (typeof v === "object" && "result" in v) return Boolean((v as { result: unknown }).result);
+  return String(v).trim() === "1";
+};
 
 const texto = (v: unknown): string => {
   if (v === null || v === undefined) return "";
@@ -948,7 +971,7 @@ export async function lerPlanilha(caminho: string): Promise<LinhaPlanilha[]> {
       quantidade: q.valor,
       unidade: q.unidade,
       validade: parseValidadeSerial(row.getCell(COLUNAS.validade).value as string | number | Date | null),
-      eliminado: texto(row.getCell(COLUNAS.eliminado).value) === "1",
+      eliminado: ehVerdadeiro(row.getCell(COLUNAS.eliminado).value),
       origem: texto(row.getCell(COLUNAS.origem).value),
       observacoes: "",
     });
@@ -960,7 +983,7 @@ export async function lerPlanilha(caminho: string): Promise<LinhaPlanilha[]> {
 - [ ] **Step 5: Rodar e confirmar que passa**
 
 Run: `pnpm test planilha`
-Expected: PASS — 10 testes
+Expected: PASS — 16 testes
 
 - [ ] **Step 6: Conferir contra o arquivo real**
 
@@ -1602,7 +1625,7 @@ Expected: 7 linhas, com as validades de 2036, 2050 (cinco) e 2051 intactas.
 - [ ] **Step 7: Rodar a suíte inteira**
 
 Run: `pnpm test`
-Expected: PASS — 57 testes (8 de `norm`, 19 de `recesso`, 10 de `planilha`, 20 de `importPlan`), nenhum falhando
+Expected: PASS — 63 testes (8 de `norm`, 19 de `recesso`, 16 de `planilha`, 20 de `importPlan`), nenhum falhando
 
 - [ ] **Step 8: Commit**
 
