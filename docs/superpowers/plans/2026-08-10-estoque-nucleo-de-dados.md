@@ -119,8 +119,8 @@ git commit -m "chore: adiciona Vitest ao monorepo"
 A função de deduplicação. Vive em dois lugares por causa da restrição de CommonJS, e um teste garante que as duas cópias nunca divirjam — foi exatamente essa divergência que fez o catálogo dar 286 numa contagem e 288 noutra.
 
 **Files:**
-- Create: `packages/core/norm.ts`
-- Modify: `packages/core/index.ts`
+- Create: `packages/core/src/norm.ts`
+- Modify: `packages/core/src/index.ts`
 - Create: `apps/server/src/estoque/norm.ts`
 - Create: `apps/server/src/estoque/norm.test.ts`
 - Delete: `apps/server/src/estoque/sanity.test.ts`
@@ -136,7 +136,7 @@ Create `apps/server/src/estoque/norm.test.ts`:
 ```ts
 import { describe, it, expect } from "vitest";
 import { norm, NORM_CASES } from "./norm.js";
-import { norm as normCore, NORM_CASES as CASES_CORE } from "../../../../packages/core/norm.js";
+import { norm as normCore, NORM_CASES as CASES_CORE } from "../../../../packages/core/src/norm.js";
 
 describe("norm", () => {
   it("remove maiúscula, acento e pontuação", () => {
@@ -192,7 +192,7 @@ Expected: FAIL — `Cannot find module './norm.js'`
 
 - [ ] **Step 3: Escrever a implementação em core**
 
-Create `packages/core/norm.ts`:
+Create `packages/core/src/norm.ts`:
 
 ```ts
 // Regra ÚNICA de deduplicação de produtos e marcas.
@@ -227,7 +227,7 @@ export const NORM_CASES: ReadonlyArray<[string, string]> = [
 
 - [ ] **Step 4: Exportar de core**
 
-Modify `packages/core/index.ts`, adicionando ao final:
+Modify `packages/core/src/index.ts`, adicionando ao final:
 
 ```ts
 export * from "./norm.js";
@@ -235,7 +235,7 @@ export * from "./norm.js";
 
 - [ ] **Step 5: Escrever a cópia do server**
 
-Create `apps/server/src/estoque/norm.ts` com **conteúdo idêntico** ao de `packages/core/norm.ts`, trocando apenas o comentário do topo:
+Create `apps/server/src/estoque/norm.ts` com **conteúdo idêntico** ao de `packages/core/src/norm.ts`, trocando apenas o comentário do topo:
 
 ```ts
 // Cópia local de packages/core/norm.ts.
@@ -287,7 +287,7 @@ Expected: PASS — 8 testes, nenhum falhando
 - [ ] **Step 9: Commit**
 
 ```bash
-git add packages/core/norm.ts packages/core/index.ts apps/server/src/estoque/norm.ts apps/server/src/estoque/norm.test.ts
+git add packages/core/src/norm.ts packages/core/src/index.ts apps/server/src/estoque/norm.ts apps/server/src/estoque/norm.test.ts
 git rm apps/server/src/estoque/sanity.test.ts
 git commit -m "feat(estoque): regra unica de normalizacao com teste de contrato"
 ```
