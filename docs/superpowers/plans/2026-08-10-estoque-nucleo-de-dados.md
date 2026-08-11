@@ -1306,6 +1306,7 @@ export type ResumoImportacao = {
   vencidosComSaldo: number;
   prazoPassouComSaldo: number;
   armadilhas: number;
+  especialidadesDivergentes: Array<{ produto: string; especialidades: string[] }>;
   fusoes: Array<{ de: string[]; para: string }>;
 };
 
@@ -1422,7 +1423,7 @@ export function planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao
 - [ ] **Step 4: Rodar e confirmar que passa**
 
 Run: `pnpm test importPlan`
-Expected: PASS — 20 testes
+Expected: PASS — 23 testes
 
 - [ ] **Step 5: Conferir contra a planilha real**
 
@@ -1611,6 +1612,16 @@ Grafias unificadas ............... ${r.fusoes.length}`);
 
 for (const f of r.fusoes) console.log(`  ${f.de.join(" + ")} → ${f.para}`);
 
+if (r.especialidadesDivergentes.length) {
+  console.log(`
+Usados em mais de uma disciplina . ${r.especialidadesDivergentes.length}
+O banco guarda uma especialidade por produto — a primeira vista. Estes materiais
+aparecem em mais de uma, então filtrar por disciplina vai esconder alguns deles:`);
+  for (const d of r.especialidadesDivergentes) {
+    console.log(`  ${d.produto}: ${d.especialidades.join(" / ")}`);
+  }
+}
+
 console.log(`
 Nenhum lote e nenhuma validade foram alterados.
 `);
@@ -1663,7 +1674,7 @@ Expected: 7 linhas, com as validades de 2036, 2050 (cinco) e 2051 intactas.
 - [ ] **Step 7: Rodar a suíte inteira**
 
 Run: `pnpm test`
-Expected: PASS — 63 testes (8 de `norm`, 19 de `recesso`, 16 de `planilha`, 20 de `importPlan`), nenhum falhando
+Expected: PASS — 66 testes (8 de `norm`, 19 de `recesso`, 16 de `planilha`, 23 de `importPlan`), nenhum falhando
 
 - [ ] **Step 8: Commit**
 
