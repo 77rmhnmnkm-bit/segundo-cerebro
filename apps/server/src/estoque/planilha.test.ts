@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseQuantidade, parseValidadeSerial } from "./planilha.js";
+import { parseQuantidade, parseValidadeSerial, ehVerdadeiro } from "./planilha.js";
 
 const iso = (x: Date | null) =>
   x ? `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}` : null;
@@ -47,5 +47,40 @@ describe("parseValidadeSerial", () => {
 
   it("aceita Date já convertida pelo ExcelJS", () => {
     expect(iso(parseValidadeSerial(new Date(2027, 2, 1) as unknown as number))).toBe("2027-03-01");
+  });
+
+  it("lê Date ancorada em meia-noite UTC (formato real do ExcelJS) sem recuar um dia", () => {
+    // Este é o formato exato que o ExcelJS entrega para células de data:
+    // Date ancorada em getUTCHours/Minutes/Seconds === 0. Ler isso com
+    // getters LOCAIS em UTC-3 devolveria "2023-02-28" — recuando um dia —
+    // que foi o bug real encontrado em 358 de 358 linhas de Validade da
+    // planilha real (ver Achado Important 1 da revisão). O código lê com
+    // getters UTC (getUTCFullYear/getUTCMonth/getUTCDate) exatamente para
+    // evitar essa regressão.
+    expect(iso(parseValidadeSerial(new Date(Date.UTC(2023, 2, 1))))).toBe("2023-03-01");
+  });
+});
+
+describe("ehVerdadeiro — formato de fórmula do ExcelJS", () => {
+  it('{ formula: "TRUE()", result: true } é verdadeiro', () => {
+    expect(ehVerdadeiro({ formula: "TRUE()", result: true })).toBe(true);
+  });
+
+  it('{ formula: "FALSE()" } sem "result" é falso (cache do Excel não grava o caso falso)', () => {
+    expect(ehVerdadeiro({ formula: "FALSE()" })).toBe(false);
+  });
+
+  it('{ formula: "FALSE()", result: false } é falso', () => {
+    expect(ehVerdadeiro({ formula: "FALSE()", result: false })).toBe(false);
+  });
+
+  it('string "1" ainda é aceita como verdadeiro (fallback de texto)', () => {
+    expect(ehVerdadeiro("1")).toBe(true);
+  });
+
+  it("null, undefined e string vazia são falsos", () => {
+    expect(ehVerdadeiro(null)).toBe(false);
+    expect(ehVerdadeiro(undefined)).toBe(false);
+    expect(ehVerdadeiro("")).toBe(false);
   });
 });

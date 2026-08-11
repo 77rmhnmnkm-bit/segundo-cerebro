@@ -33,6 +33,18 @@ export function parseQuantidade(bruto: string): { valor: number | null; unidade:
 // em UTC-3.
 const EPOCH_EXCEL = Date.UTC(1899, 11, 30);
 
+// CONTRATO do parâmetro `Date`: só é válido um `Date` ancorado em meia-noite
+// UTC — é exatamente o que o ExcelJS entrega para células de data (ver
+// comentário no ramo abaixo). Um `Date` construído com componentes locais
+// (ex.: `new Date(ano, mes, dia, 21, ...)`) NÃO é seguro passar aqui: se a
+// hora local, convertida para UTC, cruzar para o dia seguinte (a partir das
+// 21h em UTC-3, já que 21h-3 = 24h = meia-noite UTC do dia seguinte), esta
+// função lê esse dia seguinte em vez do dia local pretendido. Não há como
+// distinguir em tempo de execução um `Date` local das 21h de um `Date`
+// UTC-ancorado do dia seguinte — o valor é o mesmo instante. Por isso este
+// comentário existe: quem precisar converter uma data local antes de chamar
+// `parseValidadeSerial` deve construir o valor com `Date.UTC(ano, mes, dia)`
+// (meia-noite UTC), nunca com o construtor `new Date(ano, mes, dia, ...)`.
 export function parseValidadeSerial(bruto: string | number | Date | null): Date | null {
   if (bruto === null || bruto === undefined || bruto === "") return null;
   if (bruto instanceof Date) {
@@ -67,7 +79,7 @@ const texto = (v: unknown): string => {
 // caso falso). texto(...) === "1" nunca bate contra isso — na planilha real
 // dá 0 eliminados em vez dos 47 esperados. Por isso extraímos o resultado da
 // fórmula em vez de comparar a célula como texto.
-const ehVerdadeiro = (v: unknown): boolean => {
+export const ehVerdadeiro = (v: unknown): boolean => {
   if (typeof v === "boolean") return v;
   if (v !== null && typeof v === "object" && "result" in v) {
     return ehVerdadeiro((v as { result: unknown }).result);
