@@ -159,6 +159,47 @@ describe("planImport — prazo real", () => {
   });
 });
 
+describe("planImport — especialidades divergentes", () => {
+  it("mesmo produto em categorias diferentes gera uma entrada só, com as duas especialidades", () => {
+    const p = planImport(
+      [
+        linha({ categoria: "Material De Endodontia", nome: "IRM", marca: "Dentsply", lote: "1" }),
+        linha({ categoria: "Material De  prótese", nome: "IRM", marca: "Dentsply", lote: "2" }),
+      ],
+      HOJE,
+    );
+    expect(p.produtos).toHaveLength(1);
+    expect(p.produtos[0].especialidades).toEqual(["Endodontia", "Prótese"]);
+    expect(p.resumo.especialidadesDivergentes).toEqual([
+      { produto: "IRM / Dentsply", especialidades: ["Endodontia", "Prótese"] },
+    ]);
+  });
+
+  it("mesma categoria em ambas as linhas não gera divergência", () => {
+    const p = planImport(
+      [
+        linha({ categoria: "Material De Endodontia", nome: "IRM", marca: "Dentsply", lote: "1" }),
+        linha({ categoria: "Material De endodontia", nome: "IRM", marca: "Dentsply", lote: "2" }),
+      ],
+      HOJE,
+    );
+    expect(p.produtos).toHaveLength(1);
+    expect(p.produtos[0].especialidades).toEqual(["Endodontia"]);
+    expect(p.resumo.especialidadesDivergentes).toEqual([]);
+  });
+
+  it("especialidade (singular) continua sendo a primeira categoria vista", () => {
+    const p = planImport(
+      [
+        linha({ categoria: "Material De Endodontia", nome: "IRM", marca: "Dentsply", lote: "1" }),
+        linha({ categoria: "Material De  prótese", nome: "IRM", marca: "Dentsply", lote: "2" }),
+      ],
+      HOJE,
+    );
+    expect(p.produtos[0].especialidade).toBe("Endodontia");
+  });
+});
+
 describe("planImport — resumo", () => {
   it("conta vencidos com saldo separadamente", () => {
     const p = planImport(

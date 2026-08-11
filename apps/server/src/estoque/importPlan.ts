@@ -8,6 +8,10 @@ export type ProdutoPlanejado = {
   nome: string;
   marca: string;
   especialidade: string;
+  // Todas as especialidades vistas para este produto, na ordem em que
+  // apareceram, sem repetição. Ver comentário em `especialidadesDivergentes`
+  // logo abaixo, em ResumoImportacao, sobre por que isto existe.
+  especialidades: string[];
   grafias: string[];
 };
 
@@ -38,6 +42,14 @@ export type ResumoImportacao = {
   prazoPassouComSaldo: number;
   armadilhas: number;
   fusoes: Array<{ de: string[]; para: string }>;
+  // Um mesmo material pode ser legitimamente usado em mais de uma disciplina
+  // (ex.: IRM em endodontia e em prótese) — linhas com o mesmo nome/marca mas
+  // categorias diferentes. O banco guarda uma única especialidade por produto
+  // (a primeira vista, em ProdutoPlanejado.especialidade), então a segunda
+  // categoria não pode virar uma segunda linha nem sobrescrever a primeira em
+  // silêncio. Em vez de descartá-la, ela fica registrada aqui para o
+  // relatório de importação mostrar a divergência ao usuário.
+  especialidadesDivergentes: Array<{ produto: string; especialidades: string[] }>;
 };
 
 export type PlanoImportacao = {
@@ -76,17 +88,21 @@ export function planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao
     const marcaNorm = norm(l.marca);
     const chave = `${nomeNorm}|${marcaNorm}`;
 
+    const especialidadeLinha = ESPECIALIDADES[norm(l.categoria)] ?? "Uso geral";
+
     if (!produtos.has(chave)) {
       produtos.set(chave, {
         nomeNorm,
         marcaNorm,
         nome: l.nome,
         marca: l.marca,
-        especialidade: ESPECIALIDADES[norm(l.categoria)] ?? "Uso geral",
+        especialidade: especialidadeLinha,
+        especialidades: [especialidadeLinha],
         grafias: [],
       });
     }
     const p = produtos.get(chave)!;
+    if (!p.especialidades.includes(especialidadeLinha)) p.especialidades.push(especialidadeLinha);
     const grafia = `${l.nome} / ${l.marca}`;
     if (!p.grafias.includes(grafia)) p.grafias.push(grafia);
 
@@ -122,6 +138,10 @@ export function planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao
     .filter((p) => p.grafias.length > 1)
     .map((p) => ({ de: p.grafias, para: `${p.nome} / ${p.marca}` }));
 
+  const especialidadesDivergentes = [...produtos.values()]
+    .filter((p) => p.especialidades.length > 1)
+    .map((p) => ({ produto: `${p.nome} / ${p.marca}`, especialidades: p.especialidades }));
+
   const ativos = lotes.filter((x) => x.ativo);
 
   return {
@@ -145,6 +165,7 @@ export function planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao
         (x) => x.validade && classificar(x.validade, hoje) === "armadilha",
       ).length,
       fusoes,
+      especialidadesDivergentes,
     },
   };
 }
