@@ -807,7 +807,7 @@ Create `apps/server/src/estoque/planilha.test.ts`:
 
 ```ts
 import { describe, it, expect } from "vitest";
-import { parseQuantidade, parseValidadeSerial } from "./planilha.js";
+import { parseQuantidade, parseValidadeSerial, ehVerdadeiro } from "./planilha.js";
 
 const iso = (x: Date | null) =>
   x ? `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}` : null;
@@ -854,13 +854,39 @@ describe("parseValidadeSerial", () => {
   });
 
   it("aceita Date já convertida pelo ExcelJS", () => {
-    expect(iso(parseValidadeSerial(new Date(2027, 2, 1) as unknown as number))).toBe("2027-03-01");
+    // Date.UTC porque é assim que o ExcelJS entrega. Usar new Date(2027, 2, 1)
+    // passava por acaso em UTC-3 e quebrava em fuso positivo.
+    expect(iso(parseValidadeSerial(new Date(Date.UTC(2027, 2, 1))))).toBe("2027-03-01");
   });
 
   it("Date ancorada em meia-noite UTC devolve o mesmo dia-calendário", () => {
-    // O ExcelJS entrega assim. Ler com getters LOCAIS em UTC-3 daria
-    // 2023-02-28 — foi o bug real, em 358 de 358 linhas da planilha.
+    // Ler com getters LOCAIS em UTC-3 daria 2023-02-28 — foi o bug real,
+    // em 358 de 358 linhas da planilha.
     expect(iso(parseValidadeSerial(new Date(Date.UTC(2023, 2, 1))))).toBe("2023-03-01");
+  });
+});
+
+describe("ehVerdadeiro — formato de fórmula do ExcelJS", () => {
+  it('{ formula: "TRUE()", result: true } é verdadeiro', () => {
+    expect(ehVerdadeiro({ formula: "TRUE()", result: true })).toBe(true);
+  });
+
+  it('{ formula: "FALSE()" } sem "result" é falso', () => {
+    expect(ehVerdadeiro({ formula: "FALSE()" })).toBe(false);
+  });
+
+  it('{ formula: "FALSE()", result: false } é falso', () => {
+    expect(ehVerdadeiro({ formula: "FALSE()", result: false })).toBe(false);
+  });
+
+  it('string "1" ainda é aceita como verdadeiro', () => {
+    expect(ehVerdadeiro("1")).toBe(true);
+  });
+
+  it("null, undefined e string vazia são falsos", () => {
+    expect(ehVerdadeiro(null)).toBe(false);
+    expect(ehVerdadeiro(undefined)).toBe(false);
+    expect(ehVerdadeiro("")).toBe(false);
   });
 });
 ```
@@ -937,10 +963,12 @@ const COLUNAS = {
 // fórmula, {formula:"TRUE()", result:true} ou {formula:"FALSE()"} sem result.
 // Comparar com a string "1" dava 0 eliminados em vez de 47.
 export const ehVerdadeiro = (v: unknown): boolean => {
-  if (v === null || v === undefined) return false;
   if (typeof v === "boolean") return v;
-  if (typeof v === "object" && "result" in v) return Boolean((v as { result: unknown }).result);
-  return String(v).trim() === "1";
+  if (v !== null && typeof v === "object" && "result" in v) {
+    return ehVerdadeiro((v as { result: unknown }).result);
+  }
+  const t = texto(v).toLowerCase();
+  return t === "1" || t === "true" || t === "verdadeiro";
 };
 
 const texto = (v: unknown): string => {
