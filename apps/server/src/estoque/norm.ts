@@ -1,8 +1,14 @@
-// Cópia local de packages/core/norm.ts.
+// Cópia local de packages/core/src/norm.ts.
 // NÃO importar de @app/core: o pacote resolve como CommonJS sob tsx/node-ESM e
 // importar um valor em runtime derruba o servidor com "does not provide an
 // export named". Só `import type` funciona de lá.
 // O teste de contrato em norm.test.ts falha se esta cópia divergir do core.
+// Limitação conhecida: como a pontuação é removida em vez de virar espaço,
+// nomes que só diferem por um ponto colidem — "Luvas 7.0" e "Luvas 70" viram
+// a mesma chave. Nos 388 registros reais da clínica isso não acontece: as
+// únicas colisões observadas são acento, caixa e espaço, todas legítimas. Mas
+// é um risco para cadastro futuro de produto cujo tamanho ou calibre seja
+// escrito das duas formas (com e sem ponto).
 export function norm(s: string | null | undefined): string {
   return (s ?? "")
     .toLowerCase()

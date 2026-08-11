@@ -3,6 +3,12 @@
 // "SS Plus" e "SSplus" virarem a mesma marca. Qualquer mudança aqui precisa
 // ser espelhada em apps/server/src/estoque/norm.ts — o teste de contrato falha
 // se as duas divergirem.
+// Limitação conhecida: como a pontuação é removida em vez de virar espaço,
+// nomes que só diferem por um ponto colidem — "Luvas 7.0" e "Luvas 70" viram
+// a mesma chave. Nos 388 registros reais da clínica isso não acontece: as
+// únicas colisões observadas são acento, caixa e espaço, todas legítimas. Mas
+// é um risco para cadastro futuro de produto cujo tamanho ou calibre seja
+// escrito das duas formas (com e sem ponto).
 export function norm(s: string | null | undefined): string {
   return (s ?? "")
     .toLowerCase()

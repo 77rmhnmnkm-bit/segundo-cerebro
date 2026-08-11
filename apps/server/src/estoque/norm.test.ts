@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { norm, NORM_CASES } from "./norm.js";
-import { norm as normCore, NORM_CASES as CASES_CORE } from "../../../../packages/core/norm.js";
+import { norm as normCore, NORM_CASES as CASES_CORE } from "../../../../packages/core/src/norm.js";
 
 describe("norm", () => {
   it("remove maiúscula, acento e pontuação", () => {
