@@ -403,6 +403,8 @@ Toda impressão é registrada no audit log.
 | Fusão indevida de produtos | só fusão por `norm()` idêntica; tudo reversível via audit log |
 | Divergência de validade na sincronia | perdedor preservado no log + `!` no lote |
 | Saldo materializado divergir dos movimentos | job de reconciliação que recalcula e acusa |
+| `TRUNCATE` contorna trigger de linha | trigger `before truncate ... for each statement` na migration 0031 (o log só era protegido contra UPDATE/DELETE) |
+| App conecta como dono/superusuário do banco | **em aberto.** `ALTER TABLE ... DISABLE TRIGGER` seguido de `TRUNCATE` ainda zera o log, porque a `DATABASE_URL` usa o mesmo usuário que criou as tabelas. Fechar isso exige um role de conexão sem `ALTER`/`TRUNCATE`, separado do role de migration — mas isso muda a conexão de **todos** os módulos do segundo-cérebro, não só do estoque, e é decisão do Ricardo. Registrado, não corrigido. A mesma lacuna vale para `patient_audit_log`. |
 
 ## 16. Critérios de aceite
 
