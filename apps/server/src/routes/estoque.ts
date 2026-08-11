@@ -35,6 +35,20 @@ const SELECT_LOTE = `
   join est_produtos p on p.id = l.produto_id
   left join est_locais loc on loc.id = l.local_id`;
 
+// pg devolve colunas `date` como objetos Date (não string). Comparar Date
+// diretamente com a string de hojeLocal() nunca dá true (JS converte a
+// string para NaN e a comparação falha em silêncio) — "vencido" e
+// "prazo_passou" nunca disparavam, todo lote vencido caía em "no_prazo".
+// Normaliza para "YYYY-MM-DD" pelos componentes locais (nunca toISOString,
+// mesmo motivo do hojeLocal) antes de comparar ou devolver ao cliente.
+function dataLocal(d: unknown): string | null {
+  if (d == null) return null;
+  if (typeof d === "string") return d;
+  const dt = d as Date;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+}
+
 function status(row: { validade: string | null; usar_ate: string | null }, hoje: string): string {
   if (!row.validade) return "sem_validade";
   if (row.validade < hoje) return "vencido";
@@ -108,17 +122,22 @@ export async function estoqueRoutes(app: FastifyInstance) {
     const hoje = hojeLocal();
     return {
       total: Number(total.rows[0].n),
-      lotes: rows.rows.map((r) => ({
-        id: r.id, produtoId: r.produto_id, nome: r.nome, marca: r.marca,
-        especialidade: r.especialidade, lote: r.lote,
-        validade: r.validade, usarAte: r.usar_ate, usarAteMotivo: r.usar_ate_motivo,
-        local: r.local, quantidade: Number(r.quantidade), unidade: r.unidade,
-        situacao: r.situacao, ativo: r.ativo,
-        precisaConferencia: r.precisa_conferencia,
-        conferenciaMotivo: r.conferencia_motivo ?? [],
-        observacoes: r.observacoes,
-        status: status(r, hoje), diasPerdidos: Number(r.dias_perdidos),
-      })),
+      lotes: rows.rows.map((r) => {
+        const validade = dataLocal(r.validade);
+        const usarAte = dataLocal(r.usar_ate);
+        return {
+          id: r.id, produtoId: r.produto_id, nome: r.nome, marca: r.marca,
+          especialidade: r.especialidade, lote: r.lote,
+          validade, usarAte, usarAteMotivo: r.usar_ate_motivo,
+          local: r.local, quantidade: Number(r.quantidade), unidade: r.unidade,
+          situacao: r.situacao, ativo: r.ativo,
+          precisaConferencia: r.precisa_conferencia,
+          conferenciaMotivo: r.conferencia_motivo ?? [],
+          observacoes: r.observacoes,
+          status: status({ validade, usar_ate: usarAte }, hoje),
+          diasPerdidos: Number(r.dias_perdidos),
+        };
+      }),
     };
   });
 
