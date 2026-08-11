@@ -6,6 +6,7 @@ import { AmbientBackground } from "./AmbientBackground";
 import { LoginScreen } from "./LoginScreen";
 import { Dashboard } from "./Dashboard";
 import { InventoryScreen } from "./inventory/InventoryScreen";
+import { EstoqueScreen } from "./estoque/EstoqueScreen";
 import { AgendaScreen } from "./agenda/AgendaScreen";
 import { PatientsScreen } from "./patients/PatientsScreen";
 import { PatientDetailScreen } from "./patients/PatientDetailScreen";
@@ -69,7 +70,8 @@ export function App() {
       {status === "authenticated" && user && (
         <Routes>
           <Route path="/" element={<Dashboard user={user} onLoggedOut={() => setStatus("needs-login")} />} />
-          <Route path="/estoque" element={<InventoryScreen />} />
+          <Route path="/estoque" element={<EstoqueScreen />} />
+          <Route path="/estoque-pessoal" element={<InventoryScreen />} />
           <Route path="/agenda" element={<AgendaScreen />} />
           <Route path="/pacientes" element={<PatientsScreen />} />
           <Route path="/pacientes/:id" element={<PatientDetailScreen />} />

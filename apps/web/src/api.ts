@@ -3,6 +3,9 @@ import type {
   AuthResponse,
   CalendarEvent,
   EventCategory,
+  EstoqueContagens,
+  EstoqueLote,
+  EstoqueProduto,
   InboxNote,
   InventoryDomain,
   InventoryItem,
@@ -917,4 +920,40 @@ export function updatePatientHealth(patientId: string, input: { allergies?: stri
 }
 export function checkPrescriptionSafety(patientId: string, drugId: string) {
   return request<{ warnings: SafetyWarning[] }>(`/patients/${patientId}/prescription-check`, { method: "POST", body: JSON.stringify({ drugId }) });
+}
+
+// Estoque (Clínica Escola)
+export function getEstoqueContagens() {
+  return request<EstoqueContagens>("/estoque/contagens");
+}
+
+export function getEstoqueLotes(params: {
+  visao?: string;
+  especialidade?: string;
+  local?: string;
+  busca?: string;
+  conferencia?: boolean;
+  limite?: number;
+  desde?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params.visao) q.set("visao", params.visao);
+  if (params.especialidade) q.set("especialidade", params.especialidade);
+  if (params.local) q.set("local", params.local);
+  if (params.busca) q.set("busca", params.busca);
+  if (params.conferencia) q.set("conferencia", "1");
+  if (params.limite) q.set("limite", String(params.limite));
+  if (params.desde) q.set("desde", String(params.desde));
+  return request<{ lotes: EstoqueLote[]; total: number }>(`/estoque/lotes?${q}`);
+}
+
+export function getEstoqueComprar() {
+  return request<{ produtos: EstoqueProduto[] }>("/estoque/comprar");
+}
+
+export function getEstoqueFiltros() {
+  return request<{
+    especialidades: Array<{ nome: string; total: number }>;
+    locais: Array<{ id: string; nome: string; total: number }>;
+  }>("/estoque/filtros");
 }
