@@ -34,8 +34,8 @@ export async function applyImport(plano: PlanoImportacao, usuario: string): Prom
       await client.query(
         `insert into est_lotes
            (produto_id, lote, validade, usar_ate, usar_ate_motivo, local_id, quantidade,
-            unidade, situacao, precisa_conferencia, conferencia_motivo, origem)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+            unidade, situacao, precisa_conferencia, conferencia_motivo, origem, eliminado_na_origem)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
         [
           idProduto.get(l.chaveProduto),
           l.lote || null,
@@ -49,6 +49,7 @@ export async function applyImport(plano: PlanoImportacao, usuario: string): Prom
           l.precisaConferencia,
           l.conferenciaMotivo,
           l.origem,
+          l.eliminado,
         ],
       );
     }

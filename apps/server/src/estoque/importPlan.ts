@@ -26,6 +26,7 @@ export type LotePlanejado = {
   unidade: string;
   situacao: string | null;
   ativo: boolean;
+  eliminado: boolean;
   precisaConferencia: boolean;
   conferenciaMotivo: string[];
   origem: string;
@@ -128,6 +129,7 @@ export function planImport(linhas: LinhaPlanilha[], hoje: Date): PlanoImportacao
       unidade: l.unidade,
       situacao: l.situacao === "aberto" || l.situacao === "fechado" ? l.situacao : null,
       ativo: qtd > 0 && !l.eliminado,
+      eliminado: l.eliminado,
       precisaConferencia: motivos.length > 0,
       conferenciaMotivo: motivos,
       origem: l.origem || "manual",

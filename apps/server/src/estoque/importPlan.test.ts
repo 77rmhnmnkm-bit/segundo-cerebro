@@ -111,6 +111,25 @@ describe("planImport — ativo contra inativo", () => {
   });
 });
 
+describe("planImport — flag eliminado", () => {
+  it("linha marcada como eliminada gera lote com eliminado=true e ativo=false", () => {
+    const l = planImport([linha({ quantidade: 5, eliminado: true })], HOJE).lotes[0];
+    expect(l.eliminado).toBe(true);
+    expect(l.ativo).toBe(false);
+  });
+
+  it("linha não eliminada gera lote com eliminado=false", () => {
+    const l = planImport([linha({ quantidade: 5, eliminado: false })], HOJE).lotes[0];
+    expect(l.eliminado).toBe(false);
+  });
+
+  it("lote eliminado continua preservado na lista do plano", () => {
+    const p = planImport([linha({ quantidade: 5, eliminado: true })], HOJE);
+    expect(p.lotes).toHaveLength(1);
+    expect(p.lotes[0].eliminado).toBe(true);
+  });
+});
+
 describe("planImport — marcação de conferência", () => {
   it("marca sem local", () => {
     const l = planImport([linha({ local: "" })], HOJE).lotes[0];
