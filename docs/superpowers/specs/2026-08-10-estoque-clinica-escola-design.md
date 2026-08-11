@@ -227,6 +227,41 @@ movimentos
 mesmo padrão já verificado em `patient_audit_log`. Registra movimentos, edições de
 cadastro (valor antes e depois, campo a campo), descartes, fusões de produto e impressões.
 
+## 7.5 Resolver a conferência — o `!` é fila de trabalho, não enfeite
+
+O `!` marca 53 lotes. Ele existe porque o importador **se recusa a inventar dado**: não
+corrige validade, não funde lote, não escolhe entre duas datas conflitantes. Quem resolve é
+o Ricardo, com o produto físico na mão — e o app é a ferramenta para isso, não um relatório
+que ele lê e vai corrigir noutro lugar.
+
+Cada motivo tem uma resolução própria:
+
+| Motivo | O que o app pede | Quantos |
+|---|---|---|
+| `sem validade` | ler a data no rótulo, ou marcar "produto não tem validade impressa" | 28 |
+| `sem local` | escolher onde o pote está | 23 |
+| `mesmo lote com validades diferentes` | mostrar as duas linhas lado a lado e perguntar qual data está no frasco | 8 |
+| `linha possivelmente duplicada` | mostrar as duas linhas e perguntar se são dois potes ou um lançado duas vezes | 6 |
+| `validade implausível` | confirmar 2050 ou digitar a real | 7 |
+| `sem quantidade` | contar e digitar | 2 |
+
+Regras da resolução:
+
+- **Editar validade aqui é permitido e esperado.** A restrição "nunca alterar
+  automaticamente" vale para o importador e para qualquer heurística, nunca para o
+  Ricardo. Toda edição grava valor antes e depois no `est_audit_log`.
+- **Resolver remove só o motivo resolvido**, não o `!` inteiro. Um lote sem local e sem
+  validade precisa das duas respostas. O `!` some quando `conferencia_motivo` esvazia.
+- **"Não sei" é resposta válida** e mantém o motivo — melhor um `!` honesto do que um dado
+  inventado para limpar a lista.
+- **Duplicata confirmada não apaga linha**: marca uma como `descartado_em` com motivo
+  `lancamento duplicado`, preservando o registro (§4.2).
+- A fila é ordenada por consequência: primeiro os que têm saldo vivo, depois os de validade
+  divergente, depois o resto. Um lote sem saldo e sem validade não é urgente.
+
+Essa tela é o que transforma os 53 avisos em 53 decisões registradas, e é por isso que ela
+entra cedo no Plano B — antes de scanner e antes de impressão.
+
 ## 8. Código de barras
 
 Biblioteca **ZXing** (`@zxing/browser`, Apache-2.0), câmera via `getUserMedia`.
