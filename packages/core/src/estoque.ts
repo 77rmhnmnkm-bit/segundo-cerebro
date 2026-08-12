@@ -38,4 +38,13 @@ export type EstoqueContagens = {
   validade: number;
   comprar: number;
   conferencia: number;
+  // Subconjunto de "estoque": lotes com validade impressa já vencida que
+  // ainda têm saldo físico > 0 (alimenta o painel do revisor — nunca é
+  // inventado no cliente, sempre calculado no servidor a partir de dados reais).
+  vencidosComEstoque: number;
+};
+
+export type EstoqueFiltros = {
+  especialidades: Array<{ nome: string; total: number }>;
+  locais: Array<{ id: string; nome: string; total: number }>;
 };

@@ -4,6 +4,7 @@ import type {
   CalendarEvent,
   EventCategory,
   EstoqueContagens,
+  EstoqueFiltros,
   EstoqueLote,
   EstoqueProduto,
   InboxNote,
@@ -933,6 +934,8 @@ export function getEstoqueLotes(params: {
   local?: string;
   busca?: string;
   conferencia?: boolean;
+  soFalta?: boolean;
+  soAberto?: boolean;
   limite?: number;
   desde?: number;
 }) {
@@ -942,6 +945,8 @@ export function getEstoqueLotes(params: {
   if (params.local) q.set("local", params.local);
   if (params.busca) q.set("busca", params.busca);
   if (params.conferencia) q.set("conferencia", "1");
+  if (params.soFalta) q.set("flag", "1");
+  if (params.soAberto) q.set("aberto", "1");
   if (params.limite) q.set("limite", String(params.limite));
   if (params.desde) q.set("desde", String(params.desde));
   return request<{ lotes: EstoqueLote[]; total: number }>(`/estoque/lotes?${q}`);
@@ -952,8 +957,5 @@ export function getEstoqueComprar() {
 }
 
 export function getEstoqueFiltros() {
-  return request<{
-    especialidades: Array<{ nome: string; total: number }>;
-    locais: Array<{ id: string; nome: string; total: number }>;
-  }>("/estoque/filtros");
+  return request<EstoqueFiltros>("/estoque/filtros");
 }

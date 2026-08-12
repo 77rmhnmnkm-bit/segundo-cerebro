@@ -72,11 +72,16 @@ export async function estoqueRoutes(app: FastifyInstance) {
   app.get("/estoque/contagens", async () => {
     // Reaproveita montarFiltroVisao para não deixar a definição de "validade"
     // divergir entre esta contagem e o filtro usado em /estoque/lotes.
+    // vencidos_com_estoque usa o mesmo primeiro critério de status() (validade
+    // < hoje) — não duplica a comparação usar_ate/armadilha, que é mais frágil
+    // e já tem cobertura de teste só em status(). Alimenta o painel do
+    // revisor: nunca um número inventado, sempre contado de novo aqui.
     const r = await pool.query(`
       select
         count(*) filter (where ${montarFiltroVisao("estoque")}) as estoque,
         count(*) filter (where ${montarFiltroVisao("validade")}) as validade,
-        count(*) filter (where l.precisa_conferencia) as conferencia
+        count(*) filter (where l.precisa_conferencia) as conferencia,
+        count(*) filter (where l.ativo and l.validade is not null and l.validade < current_date) as vencidos_com_estoque
       from est_lotes l`);
     const c = await pool.query(`
       select count(*) as comprar from (
@@ -88,6 +93,7 @@ export async function estoqueRoutes(app: FastifyInstance) {
       validade: Number(r.rows[0].validade),
       comprar: Number(c.rows[0].comprar),
       conferencia: Number(r.rows[0].conferencia),
+      vencidosComEstoque: Number(r.rows[0].vencidos_com_estoque),
     };
   });
 
@@ -105,6 +111,11 @@ export async function estoqueRoutes(app: FastifyInstance) {
       args.push(`%${q.busca}%`);
       cond.push(`(p.nome ilike $${args.length} or p.marca ilike $${args.length} or l.lote ilike $${args.length})`);
     }
+    // "Só mostrar" do painel de filtros — soma-se (AND) ao filtro de visão em
+    // vez de substituí-lo, ao contrário de `conferencia` acima (que é a rota
+    // dedicada da fila de conferência, e por isso troca o filtro inteiro).
+    if (q.flag === "1") cond.push("l.precisa_conferencia");
+    if (q.aberto === "1") cond.push("l.situacao = 'aberto'");
 
     const limite = Math.min(Number(q.limite) || 60, 200);
     const desde = Math.max(Number(q.desde) || 0, 0);
