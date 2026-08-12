@@ -4,17 +4,7 @@ import { useTheme } from "../ThemeProvider";
 
 const br = (d: string | null) => (d ? d.split("-").reverse().join("/") : "—");
 
-export function LoteCard({
-  lote,
-  topo,
-  esquerda,
-  onFechar,
-}: {
-  lote: EstoqueLote;
-  topo: number;
-  esquerda: number;
-  onFechar: () => void;
-}) {
+export function LoteCard({ lote }: { lote: EstoqueLote }) {
   const { theme } = useTheme();
   const linha = (rotulo: string, valor: string, cor?: string) => (
     <>
@@ -46,17 +36,10 @@ export function LoteCard({
     <div
       role="dialog"
       aria-label={`Detalhe de ${lote.nome}`}
-      onPointerLeave={onFechar}
-      className="lr-pop-in"
       style={{
         ...glassSurface(theme, { strong: true, radius: theme.radius.md }),
-        position: "absolute",
-        zIndex: 40,
-        top: topo,
-        left: esquerda,
-        width: "min(330px, calc(100vw - 32px))",
         padding: "15px 17px",
-        boxShadow: `0 18px 44px ${theme.glass.shadow}`,
+        margin: "6px 0",
       }}
     >
       <h3 style={{ margin: "0 0 2px", fontSize: 14.5, fontWeight: 600, color: theme.colors.textPrimary }}>{lote.nome}</h3>

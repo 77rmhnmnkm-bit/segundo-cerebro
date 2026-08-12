@@ -50,6 +50,7 @@ export function LoteRow({
       className={`lr-row lr-in${ativo ? " lr-row-open" : ""}`}
       onClick={() => onAbrir(lote)}
       onPointerEnter={() => onAbrir(lote)}
+      aria-expanded={ativo}
       style={{
         display: "grid",
         gridTemplateColumns: "4px minmax(0,1fr) 104px 80px 108px",

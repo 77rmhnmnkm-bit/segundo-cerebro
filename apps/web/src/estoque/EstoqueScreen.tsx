@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { EstoqueLote, EstoqueProduto, EstoqueVisao } from "@app/core";
 import { glassSurface } from "@app/ui";
@@ -94,7 +94,11 @@ function ProdutoTile({ produto, index }: { produto: EstoqueProduto; index: numbe
         display: "flex",
         flexDirection: "column",
         gap: 5,
-        minHeight: 118,
+        // Mesma altura/largura fixas do LoteTile — ver comentário lá para o motivo.
+        height: 132,
+        width: "100%",
+        boxSizing: "border-box",
+        overflow: "hidden",
         color: theme.colors.textPrimary,
         animationDelay: `${Math.min(index * 14, 200)}ms`,
       }}
@@ -104,6 +108,7 @@ function ProdutoTile({ produto, index }: { produto: EstoqueProduto; index: numbe
           fontSize: 12.5,
           fontWeight: 600,
           lineHeight: 1.32,
+          height: "2.64em",
           display: "-webkit-box",
           WebkitLineClamp: 2,
           WebkitBoxOrient: "vertical",
@@ -112,7 +117,17 @@ function ProdutoTile({ produto, index }: { produto: EstoqueProduto; index: numbe
       >
         {produto.nome}
       </span>
-      <span style={{ fontSize: 10.5, color: theme.colors.textSecondary }}>{produto.marca ?? "—"}</span>
+      <span
+        style={{
+          fontSize: 10.5,
+          color: theme.colors.textSecondary,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {produto.marca ?? "—"}
+      </span>
       <span
         style={{
           fontSize: 10.5,
@@ -123,6 +138,11 @@ function ProdutoTile({ produto, index }: { produto: EstoqueProduto; index: numbe
           color: theme.colors.textSecondary,
           marginTop: "auto",
           alignSelf: "flex-start",
+          flex: "none",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          maxWidth: "100%",
         }}
       >
         sem estoque · {produto.lotes} lote{produto.lotes === 1 ? "" : "s"}
@@ -200,28 +220,62 @@ export function EstoqueScreen() {
   const [carregandoMais, setCarregandoMais] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const [cardAberto, setCardAberto] = useState<{ lote: EstoqueLote; topo: number; esquerda: number } | null>(null);
+  // abertoId: qual lote está expandido agora (no máximo um). expandidos:
+  // conjunto de ids que ainda têm o painel MONTADO no DOM — inclui o
+  // `abertoId` atual e, durante a troca de um item para outro, também o
+  // item anterior enquanto sua animação de fechamento ainda está correndo.
+  // É o que permite as duas transições (a que fecha e a que abre) rodarem
+  // juntas em vez de uma cortar a outra.
+  const [abertoId, setAbertoId] = useState<string | null>(null);
+  const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [filtrosPos, setFiltrosPos] = useState<{ topo: number; esquerda: number } | null>(null);
 
   const areaRef = useRef<HTMLDivElement>(null);
-  const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
   const filtrosBtnRef = useRef<HTMLButtonElement>(null);
   const filtrosPopRef = useRef<HTMLDivElement>(null);
   const abrirTimer = useRef<number | null>(null);
   const fecharTimer = useRef<number | null>(null);
 
-  // Padrão de "pontes" de hover-card: abrir tem atraso de 170ms (evita o card
-  // pipocando enquanto o mouse só está passando por cima da lista); fechar
-  // também tem um pequeno atraso, e tanto uma nova linha quanto o próprio
-  // card cancelam esse fechamento — sem isso, o trajeto do mouse da linha até
-  // o card (que flutua por cima da lista) dispara um pointerleave que fecha o
-  // card antes que dê tempo de ler o conteúdo.
+  function reduzirMovimento() {
+    return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+  }
+
   const cancelarFechar = useCallback(() => {
     if (fecharTimer.current) {
       window.clearTimeout(fecharTimer.current);
       fecharTimer.current = null;
     }
+  }, []);
+
+  // Fecha imediatamente, sem esperar a animação — usado quando o filtro, a
+  // aba ou a busca mudam (a lista toda vai remontar de qualquer forma) e
+  // quando o popover de filtros abre.
+  const fecharImediato = useCallback(() => {
+    if (abrirTimer.current) {
+      window.clearTimeout(abrirTimer.current);
+      abrirTimer.current = null;
+    }
+    if (fecharTimer.current) {
+      window.clearTimeout(fecharTimer.current);
+      fecharTimer.current = null;
+    }
+    setAbertoId(null);
+    setExpandidos(new Set());
+  }, []);
+
+  const abrirImediato = useCallback((lote: EstoqueLote) => {
+    setAbertoId(lote.id);
+    setExpandidos((atual) => {
+      // Sem animação: não há transição de fechamento para esperar, então só
+      // o item novo fica montado.
+      if (reduzirMovimento()) return new Set([lote.id]);
+      if (atual.has(lote.id)) return atual;
+      const novo = new Set(atual);
+      novo.add(lote.id);
+      return novo;
+    });
+    setFiltrosAbertos(false);
   }, []);
 
   const agendarFechar = useCallback(() => {
@@ -230,36 +284,44 @@ export function EstoqueScreen() {
       abrirTimer.current = null;
     }
     cancelarFechar();
-    fecharTimer.current = window.setTimeout(() => setCardAberto(null), 150);
+    fecharTimer.current = window.setTimeout(() => {
+      setAbertoId(null);
+      if (reduzirMovimento()) setExpandidos(new Set());
+    }, 150);
   }, [cancelarFechar]);
 
   const agendarAbrir = useCallback(
     (lote: EstoqueLote) => {
       cancelarFechar();
       if (abrirTimer.current) window.clearTimeout(abrirTimer.current);
-      abrirTimer.current = window.setTimeout(() => {
-        const rowEl = rowRefs.current.get(lote.id);
-        const areaEl = areaRef.current;
-        if (!rowEl || !areaEl) return;
-        const r = rowEl.getBoundingClientRect();
-        const a = areaEl.getBoundingClientRect();
-        const largura = 330;
-        const esquerda = Math.max(a.width - largura - 16, 16);
-        const topo = Math.max(Math.min(r.top - a.top, Math.max(a.height - 40, 0)), 0);
-        setCardAberto({ lote, topo, esquerda });
-        setFiltrosAbertos(false);
-      }, 170);
+      abrirTimer.current = window.setTimeout(() => abrirImediato(lote), 170);
     },
-    [cancelarFechar],
+    [cancelarFechar, abrirImediato],
   );
 
-  // Trocar de aba, filtro ou busca fecha o card — sem isso ele continuaria
-  // flutuando com os dados do lote anterior por cima de uma lista diferente.
+  // Quando a transição de altura (fechando) termina num item que não é mais
+  // o `abertoId` atual, ele sai de `expandidos` e desmonta. Se o item ainda
+  // é o aberto (acabou de abrir), não faz nada — só a transição de abertura
+  // terminou.
+  const aoFecharTransicao = useCallback(
+    (id: string, evento: React.TransitionEvent<HTMLDivElement>) => {
+      if (evento.propertyName !== "grid-template-rows") return;
+      if (id === abertoId) return;
+      setExpandidos((atual) => {
+        if (!atual.has(id)) return atual;
+        const novo = new Set(atual);
+        novo.delete(id);
+        return novo;
+      });
+    },
+    [abertoId],
+  );
+
+  // Trocar de aba, filtro ou busca fecha o painel — sem isso ele continuaria
+  // mostrando os dados do lote anterior numa lista diferente.
   useEffect(() => {
-    if (abrirTimer.current) window.clearTimeout(abrirTimer.current);
-    if (fecharTimer.current) window.clearTimeout(fecharTimer.current);
-    setCardAberto(null);
-  }, [visao, especialidade, local, busca, soFalta, soAberto]);
+    fecharImediato();
+  }, [visao, especialidade, local, busca, soFalta, soAberto, fecharImediato]);
 
   // Fecha o popover de filtros ao clicar fora ou apertar Esc.
   useEffect(() => {
@@ -296,7 +358,7 @@ export function EstoqueScreen() {
     const topo = b.bottom - a.top + 6;
     setFiltrosPos({ topo, esquerda });
     setFiltrosAbertos(true);
-    setCardAberto(null);
+    fecharImediato();
   }
 
   const opcoesVisaoComContagem: PillOption<EstoqueVisao>[] = OPCOES_VISAO.map((o) => ({
@@ -351,6 +413,16 @@ export function EstoqueScreen() {
       }
     }
 
+    /* O respiro entre rótulo e selo (gap 9px, selo com padding 1px 6px) fica
+       ótimo em telas largas, mas em 375px os três segmentos ("Em estoque
+       215" · "Validade 54" · "Comprar 111") não cabem mais na linha com
+       esse respiro extra — estoura a largura da tela. Abaixo de 480px volta
+       ao espaçamento mais compacto que já cabia. */
+    @media (max-width: 480px) {
+      .lr-pill-visao .lr-pill-btn { gap: 6px !important; }
+      .lr-pill-visao .lr-pill-badge { padding: 1px 5px !important; }
+    }
+
     .lr-row { background: transparent; }
     .lr-tile { background: ${theme.glass.surface}; border: 1px solid ${theme.glass.border}; }
     .lr-row, .lr-tile { transition: background ${theme.motion.fast}ms ease, border-color ${theme.motion.fast}ms ease; }
@@ -369,12 +441,40 @@ export function EstoqueScreen() {
         width 200ms cubic-bezier(.32,.72,0,1), height 200ms cubic-bezier(.32,.72,0,1);
     }
 
+    /* Painel de detalhe em fluxo: a altura anima via grid-template-rows
+       0fr → 1fr (não max-height "chutado" — esse truque anima suave até 0
+       de verdade porque o item interno tem overflow:hidden, o que zera o
+       tamanho mínimo automático que o grid respeitaria). Largura cheia
+       sempre — em modo Ícones o próprio elemento recebe grid-column:1/-1
+       inline para furar a grade e empurrar as fileiras seguintes. */
+    .lr-expansor {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 220ms cubic-bezier(.32,.72,0,1);
+    }
+    .lr-expansor.lr-expansor-open { grid-template-rows: 1fr; }
+    .lr-expansor-inner { overflow: hidden; min-height: 0; }
+    .lr-expansor-content {
+      opacity: 0;
+      transform: translateY(-6px);
+      transition: opacity 220ms cubic-bezier(.32,.72,0,1), transform 220ms cubic-bezier(.32,.72,0,1);
+    }
+    /* O conteúdo entra ~70ms depois da altura começar a abrir, para não
+       parecer que o texto "salta" para dentro de um espaço que ainda está
+       crescendo. Ao fechar não há atraso — some junto com a altura. */
+    .lr-expansor.lr-expansor-open .lr-expansor-content {
+      opacity: 1;
+      transform: translateY(0);
+      transition-delay: 70ms;
+    }
+
     @keyframes lr-toast-kf { from { opacity: 0; transform: translate(-50%, 20px); } to { opacity: 1; transform: translate(-50%, 0); } }
     .lr-toast-in { left: 50%; animation: lr-toast-kf 220ms cubic-bezier(.32,.72,0,1) both; }
 
     @media (prefers-reduced-motion: reduce) {
       .lr-in, .lr-pop-in, .lr-toast-in { animation: none !important; opacity: 1 !important; transform: none !important; }
       .lr-pill-indicator, .lr-row, .lr-tile { transition: none !important; }
+      .lr-expansor, .lr-expansor-content { transition: none !important; }
     }
   `,
     [theme],
@@ -465,7 +565,13 @@ export function EstoqueScreen() {
 
       <div ref={areaRef} style={{ position: "relative" }}>
         <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.sm, flexWrap: "wrap", marginBottom: theme.spacing.md }}>
-          <PillSegmented options={opcoesVisaoComContagem} value={visao} onChange={setVisao} ariaLabel="Visão" />
+          <PillSegmented
+            options={opcoesVisaoComContagem}
+            value={visao}
+            onChange={setVisao}
+            ariaLabel="Visão"
+            className="lr-pill-visao"
+          />
           <div style={{ flex: 1 }} />
           <PillSegmented options={OPCOES_MODO} value={modo} onChange={setModo} ariaLabel="Modo de exibição" compact />
           <button
@@ -510,35 +616,66 @@ export function EstoqueScreen() {
 
           {!listaVazia && modo === "lista" && visao !== "comprar" && <Cabecalho />}
 
-          {!listaVazia && visao !== "comprar" && (
-            <div key={chaveLista} style={modo === "icones" ? { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 9 } : { display: "flex", flexDirection: "column", gap: 2 }}>
-              {lotes.map((lote, i) =>
-                modo === "icones" ? (
-                  <div
-                    key={lote.id}
-                    ref={(el) => {
-                      if (el) rowRefs.current.set(lote.id, el);
-                      else rowRefs.current.delete(lote.id);
-                    }}
-                    onPointerEnter={cancelarFechar}
-                    onPointerLeave={agendarFechar}
-                  >
-                    <LoteTile lote={lote} onAbrir={agendarAbrir} index={i} ativo={cardAberto?.lote.id === lote.id} />
+          {!listaVazia && visao !== "comprar" && modo === "lista" && (
+            <div key={chaveLista} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {lotes.map((lote, i) => {
+                const ativo = abertoId === lote.id;
+                const montado = expandidos.has(lote.id);
+                return (
+                  <div key={lote.id} onPointerEnter={cancelarFechar} onPointerLeave={agendarFechar}>
+                    <LoteRow lote={lote} onAbrir={agendarAbrir} index={i} ativo={ativo} />
+                    {montado && (
+                      <div
+                        className={`lr-expansor${ativo ? " lr-expansor-open" : ""}`}
+                        onTransitionEnd={(e) => aoFecharTransicao(lote.id, e)}
+                      >
+                        <div className="lr-expansor-inner">
+                          <div className="lr-expansor-content">
+                            <LoteCard lote={lote} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div
-                    key={lote.id}
-                    ref={(el) => {
-                      if (el) rowRefs.current.set(lote.id, el);
-                      else rowRefs.current.delete(lote.id);
-                    }}
-                    onPointerEnter={cancelarFechar}
-                    onPointerLeave={agendarFechar}
-                  >
-                    <LoteRow lote={lote} onAbrir={agendarAbrir} index={i} ativo={cardAberto?.lote.id === lote.id} />
-                  </div>
-                ),
-              )}
+                );
+              })}
+            </div>
+          )}
+
+          {!listaVazia && visao !== "comprar" && modo === "icones" && (
+            <div
+              key={chaveLista}
+              style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 9 }}
+            >
+              {lotes.map((lote, i) => {
+                const ativo = abertoId === lote.id;
+                const montado = expandidos.has(lote.id);
+                return (
+                  <Fragment key={lote.id}>
+                    <div onPointerEnter={cancelarFechar} onPointerLeave={agendarFechar}>
+                      <LoteTile lote={lote} onAbrir={agendarAbrir} index={i} ativo={ativo} />
+                    </div>
+                    {montado && (
+                      // grid-column ligado ao bloco clicado: precisa ser item direto
+                      // da mesma grade (por isso é irmão do wrapper acima, não filho
+                      // dele) para furar a fileira inteira e empurrar as próximas.
+                      <div
+                        style={{ gridColumn: "1 / -1" }}
+                        onPointerEnter={cancelarFechar}
+                        onPointerLeave={agendarFechar}
+                        className={`lr-expansor${ativo ? " lr-expansor-open" : ""}`}
+                        onTransitionEnd={(e) => aoFecharTransicao(lote.id, e)}
+                      >
+                        <div className="lr-expansor-inner">
+                          <div className="lr-expansor-content">
+                            <LoteCard lote={lote} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </Fragment>
+                );
+              })}
             </div>
           )}
 
@@ -586,12 +723,6 @@ export function EstoqueScreen() {
             </div>
           )}
         </div>
-
-        {cardAberto && (
-          <div onPointerEnter={cancelarFechar}>
-            <LoteCard lote={cardAberto.lote} topo={cardAberto.topo} esquerda={cardAberto.esquerda} onFechar={agendarFechar} />
-          </div>
-        )}
 
         {filtrosAbertos && filtrosPos && (
           <div ref={filtrosPopRef}>

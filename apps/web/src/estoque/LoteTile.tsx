@@ -23,6 +23,7 @@ export function LoteTile({
       className={`lr-tile lr-in${ativo ? " lr-row-open" : ""}`}
       onClick={() => onAbrir(lote)}
       onPointerEnter={() => onAbrir(lote)}
+      aria-expanded={ativo}
       style={{
         borderRadius: theme.radius.md,
         padding: 12,
@@ -30,7 +31,23 @@ export function LoteTile({
         display: "flex",
         flexDirection: "column",
         gap: 5,
-        minHeight: 118,
+        // Altura FIXA (não minHeight): antes cada bloco crescia com o
+        // próprio conteúdo — nome de 1 linha dava um bloco baixo, nome de 2
+        // linhas dava um bloco mais alto, marca longa dava um terceiro
+        // tamanho. Fixando a altura e reservando o espaço de cada linha
+        // (nome sempre com as 2 linhas do line-clamp reservadas, marca
+        // sempre 1 linha com reticências) todos os blocos ficam idênticos
+        // independente do texto.
+        height: 132,
+        // width:100% — sem isso o <button> (inline-block por padrão) encolhe
+        // para o conteúdo em vez de ocupar a coluna inteira da grade: dois
+        // blocos na mesma fileira acabavam com LARGURAS diferentes (ex.: um
+        // com badge "vencido" ficava mais estreito que o vizinho com "no
+        // prazo"), quebrando a mesma exigência de "todo bloco igual" que
+        // motivou fixar a altura.
+        width: "100%",
+        boxSizing: "border-box",
+        overflow: "hidden",
         cursor: "pointer",
         color: theme.colors.textPrimary,
         animationDelay: `${Math.min(index * 14, 200)}ms`,
@@ -41,6 +58,7 @@ export function LoteTile({
           fontSize: 12.5,
           fontWeight: 600,
           lineHeight: 1.32,
+          height: "2.64em",
           display: "-webkit-box",
           WebkitLineClamp: 2,
           WebkitBoxOrient: "vertical",
@@ -55,7 +73,17 @@ export function LoteTile({
           </span>
         )}
       </span>
-      <span style={{ fontSize: 10.5, color: theme.colors.textSecondary }}>{lote.marca ?? "—"}</span>
+      <span
+        style={{
+          fontSize: 10.5,
+          color: theme.colors.textSecondary,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {lote.marca ?? "—"}
+      </span>
       <span
         style={{
           fontFamily: "ui-monospace, monospace",
@@ -63,6 +91,9 @@ export function LoteTile({
           fontWeight: 600,
           fontVariantNumeric: "tabular-nums",
           marginTop: "auto",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
         }}
       >
         {lote.quantidade || 0}
@@ -70,7 +101,7 @@ export function LoteTile({
           {lote.unidade}
         </i>
       </span>
-      <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+      <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, flex: "none" }}>
         <span
           style={{
             fontSize: 10.5,

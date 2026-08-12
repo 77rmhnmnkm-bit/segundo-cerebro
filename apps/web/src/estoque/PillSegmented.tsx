@@ -20,17 +20,27 @@ export function PillSegmented<T extends string>({
   onChange,
   ariaLabel,
   compact,
+  className,
 }: {
   options: PillOption<T>[];
   value: T;
   onChange: (v: T) => void;
   ariaLabel: string;
   compact?: boolean;
+  className?: string;
 }) {
   const { theme } = useTheme();
   const btnRefs = useRef<Map<T, HTMLButtonElement>>(new Map());
   const [rect, setRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
 
+  // A pílula precisa remedir sempre que o CONTEÚDO do botão ativo mudar de
+  // largura — não só quando o valor selecionado muda. O selo de contagem
+  // (215/54/111) chega depois, assíncrono (contagens começa null e vira
+  // número); se a dependência abaixo olhasse só rótulo+valor, a pílula era
+  // medida com o botão ainda sem selo (mais estreito) e nunca era remedida
+  // quando o selo aparecia — resultado: fundo mais estreito que o texto,
+  // cortando o número. Por isso a serialização inclui o próprio selo.
+  const assinatura = options.map((o) => `${o.label}:${o.badge ?? ""}`).join("|");
   useLayoutEffect(() => {
     function medir() {
       const el = btnRefs.current.get(value);
@@ -40,13 +50,13 @@ export function PillSegmented<T extends string>({
     medir();
     window.addEventListener("resize", medir);
     return () => window.removeEventListener("resize", medir);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, options.map((o) => o.label).join("|")]);
+  }, [value, assinatura]);
 
   return (
     <div
       role="group"
       aria-label={ariaLabel}
+      className={className}
       style={{
         position: "relative",
         display: "inline-flex",
@@ -82,6 +92,7 @@ export function PillSegmented<T extends string>({
               else btnRefs.current.delete(opt.value);
             }}
             type="button"
+            className="lr-pill-btn"
             onClick={() => onChange(opt.value)}
             aria-pressed={active}
             style={{
@@ -97,7 +108,7 @@ export function PillSegmented<T extends string>({
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
-              gap: 6,
+              gap: 9,
               whiteSpace: "nowrap",
               transition: `color ${theme.motion.fast}ms ease`,
             }}
@@ -105,15 +116,17 @@ export function PillSegmented<T extends string>({
             {opt.label}
             {opt.badge != null && (
               <span
+                className="lr-pill-badge"
                 style={{
                   fontFamily: "ui-monospace, monospace",
                   fontSize: 10.5,
                   fontWeight: 600,
-                  padding: "1px 5px",
+                  padding: "1px 6px",
                   borderRadius: 5,
                   background: `${toneCor}22`,
                   color: toneCor,
                   fontVariantNumeric: "tabular-nums",
+                  flex: "none",
                 }}
               >
                 {opt.badge}
