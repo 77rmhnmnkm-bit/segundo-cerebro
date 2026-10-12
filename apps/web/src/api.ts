@@ -5,8 +5,11 @@ import type {
   EventCategory,
   EstoqueContagens,
   EstoqueFiltros,
+  EstoqueHistorico,
+  EstoqueLocal,
   EstoqueLote,
   EstoqueProduto,
+  MotivoDescarte,
   InboxNote,
   InventoryDomain,
   InventoryItem,
@@ -934,6 +937,7 @@ export function getEstoqueLotes(params: {
   local?: string;
   busca?: string;
   conferencia?: boolean;
+  vencidos?: boolean;
   soFalta?: boolean;
   soAberto?: boolean;
   limite?: number;
@@ -945,6 +949,7 @@ export function getEstoqueLotes(params: {
   if (params.local) q.set("local", params.local);
   if (params.busca) q.set("busca", params.busca);
   if (params.conferencia) q.set("conferencia", "1");
+  if (params.vencidos) q.set("vencidos", "1");
   if (params.soFalta) q.set("flag", "1");
   if (params.soAberto) q.set("aberto", "1");
   if (params.limite) q.set("limite", String(params.limite));
@@ -958,4 +963,41 @@ export function getEstoqueComprar() {
 
 export function getEstoqueFiltros() {
   return request<EstoqueFiltros>("/estoque/filtros");
+}
+
+export function getEstoqueLocais() {
+  return request<{ locais: EstoqueLocal[] }>("/estoque/locais");
+}
+
+export function patchEstoqueLote(
+  id: string,
+  body: {
+    localId?: string | null;
+    validade?: string | null;
+    semValidadeImpressa?: boolean;
+    quantidade?: number;
+    observacoes?: string | null;
+    situacao?: string | null;
+    resolverMotivos?: string[];
+  },
+) {
+  return request<{ lote: EstoqueLote }>(`/estoque/lotes/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export function descartarEstoqueLote(id: string, motivo: MotivoDescarte) {
+  return request<{ lote: EstoqueLote }>(`/estoque/lotes/${id}/descartar`, {
+    method: "POST",
+    body: JSON.stringify({ motivo }),
+  });
+}
+
+export function movimentarEstoqueLote(id: string, tipo: "entrada" | "saida", quantidade: number, motivo?: string) {
+  return request<{ lote: EstoqueLote }>(`/estoque/lotes/${id}/movimento`, {
+    method: "POST",
+    body: JSON.stringify({ tipo, quantidade, motivo }),
+  });
+}
+
+export function getEstoqueLoteHistorico(id: string) {
+  return request<EstoqueHistorico>(`/estoque/lotes/${id}/historico`);
 }

@@ -20,9 +20,11 @@ export function LoteTile({
       type="button"
       // Fundo/borda (padrão, hover, aberto) definidos no <style> de
       // EstoqueScreen — mesmo motivo do LoteRow: inline sempre venceria :hover.
+      //
+      // Sem onPointerEnter aqui: mesmo motivo do LoteRow — hover é card
+      // flutuante, decidido por quem envolve este bloco.
       className={`lr-tile lr-in${ativo ? " lr-row-open" : ""}`}
       onClick={() => onAbrir(lote)}
-      onPointerEnter={() => onAbrir(lote)}
       aria-expanded={ativo}
       style={{
         borderRadius: theme.radius.md,

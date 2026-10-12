@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { EstoqueLote, EstoqueProduto, EstoqueVisao } from "@app/core";
 import { glassSurface } from "@app/ui";
@@ -9,6 +9,8 @@ import { FiltrosPopover } from "./FiltrosPopover";
 import { LoteRow } from "./LoteRow";
 import { LoteTile } from "./LoteTile";
 import { LoteCard } from "./LoteCard";
+import { TriagemSwipe } from "./TriagemSwipe";
+import { LoteHoverCard, type AcaoRapida } from "./LoteHoverCard";
 import { Toast } from "./Toast";
 import { useEstoque } from "./useEstoque";
 import { useRevisorAvisos } from "./useRevisorAvisos";
@@ -201,6 +203,7 @@ export function EstoqueScreen() {
     setModo,
     carregando,
     setVisao,
+    recarregar,
     carregarMais,
     buscaInput,
     setBuscaInput,
@@ -219,50 +222,139 @@ export function EstoqueScreen() {
   const { avisos } = useRevisorAvisos();
   const [carregandoMais, setCarregandoMais] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [triagemAberta, setTriagemAberta] = useState(false);
 
-  // abertoId: qual lote está expandido agora (no máximo um). expandidos:
-  // conjunto de ids que ainda têm o painel MONTADO no DOM — inclui o
-  // `abertoId` atual e, durante a troca de um item para outro, também o
-  // item anterior enquanto sua animação de fechamento ainda está correndo.
-  // É o que permite as duas transições (a que fecha e a que abre) rodarem
-  // juntas em vez de uma cortar a outra.
+  // abertoId: qual lote está com a GAVETA expandida agora (no máximo uma).
+  // expandidos: conjunto de ids que ainda têm o painel MONTADO no DOM —
+  // inclui o `abertoId` atual e, durante a troca de um item para outro,
+  // também o item anterior enquanto sua animação de fechamento ainda está
+  // correndo. É o que permite as duas transições (a que fecha e a que abre)
+  // rodarem juntas em vez de uma cortar a outra. A gaveta só reage a CLIQUE.
   const [abertoId, setAbertoId] = useState<string | null>(null);
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [filtrosPos, setFiltrosPos] = useState<{ topo: number; esquerda: number } | null>(null);
 
+  // cardLoteId: qual lote está com o CARD FLUTUANTE do hover mostrando (no
+  // máximo um). É uma interação separada da gaveta — reage a passar o mouse
+  // (com atraso) ou a toque longo, nunca a clique direto (clique é a gaveta).
+  const [cardLoteId, setCardLoteId] = useState<string | null>(null);
+  const [cardPos, setCardPos] = useState<{ esquerda: number; acima: boolean; valor: number } | null>(null);
+
   const areaRef = useRef<HTMLDivElement>(null);
   const filtrosBtnRef = useRef<HTMLButtonElement>(null);
   const filtrosPopRef = useRef<HTMLDivElement>(null);
-  const abrirTimer = useRef<number | null>(null);
-  const fecharTimer = useRef<number | null>(null);
+
+  const cardAnchorRef = useRef<HTMLElement | null>(null);
+  const cardElRef = useRef<HTMLDivElement>(null);
+  const cardCorrigidoRef = useRef<string | null>(null);
+  const cardAbrirTimer = useRef<number | null>(null);
+  const cardFecharTimer = useRef<number | null>(null);
+
+  // Toque longo (mobile): pointerdown inicia um temporizador de ~450ms que
+  // abre o card flutuante; move além de 10px ou soltar antes cancela.
+  // pressLongoRef fica true depois que o temporizador dispara e continua
+  // true durante o "click" sintético que o navegador gera ao soltar o dedo —
+  // é o que usamos para esse clique NÃO também abrir a gaveta.
+  const pressTimer = useRef<number | null>(null);
+  const pressLongoRef = useRef(false);
+  const pressOrigemRef = useRef<{ x: number; y: number } | null>(null);
 
   function reduzirMovimento() {
     return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
   }
 
-  const cancelarFechar = useCallback(() => {
-    if (fecharTimer.current) {
-      window.clearTimeout(fecharTimer.current);
-      fecharTimer.current = null;
+  // Posição do card flutuante, ancorada perto da linha (não do container),
+  // do mesmo jeito que o popover de filtros já faz. `acima` decide se o card
+  // cresce para baixo (padrão, `valor` = top) ou para cima (`valor` = bottom)
+  // — quando não há espaço abaixo antes do fim da viewport. Um efeito depois
+  // do primeiro render corrige com o tamanho REAL do card (ver useLayoutEffect).
+  function calcularPosicaoCard(anchor: HTMLElement) {
+    const area = areaRef.current;
+    if (!area) return null;
+    const a = anchor.getBoundingClientRect();
+    const p = area.getBoundingClientRect();
+    const largura = Math.min(300, window.innerWidth - 16);
+    const esquerda = Math.max(8, Math.min(a.left - p.left, p.width - largura - 8));
+    const espacoAbaixo = window.innerHeight - a.bottom;
+    const acima = espacoAbaixo < 240 && a.top > 240;
+    const valor = acima ? p.bottom - a.top + 6 : a.bottom - p.top + 6;
+    return { esquerda, acima, valor };
+  }
+
+  const cancelarFecharCard = useCallback(() => {
+    if (cardFecharTimer.current) {
+      window.clearTimeout(cardFecharTimer.current);
+      cardFecharTimer.current = null;
     }
   }, []);
 
-  // Fecha imediatamente, sem esperar a animação — usado quando o filtro, a
-  // aba ou a busca mudam (a lista toda vai remontar de qualquer forma) e
-  // quando o popover de filtros abre.
+  const cancelarPress = useCallback(() => {
+    if (pressTimer.current) {
+      window.clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+    pressOrigemRef.current = null;
+  }, []);
+
+  // Fecha o card flutuante sem esperar animação — usado ao clicar (a gaveta
+  // vai abrir no lugar), ao trocar aba/filtro/busca e ao clicar fora dele.
+  const fecharCardImediato = useCallback(() => {
+    if (cardAbrirTimer.current) {
+      window.clearTimeout(cardAbrirTimer.current);
+      cardAbrirTimer.current = null;
+    }
+    if (cardFecharTimer.current) {
+      window.clearTimeout(cardFecharTimer.current);
+      cardFecharTimer.current = null;
+    }
+    cardAnchorRef.current = null;
+    cardCorrigidoRef.current = null;
+    setCardLoteId(null);
+    setCardPos(null);
+  }, []);
+
+  const abrirCardImediato = useCallback((lote: EstoqueLote, anchor: HTMLElement) => {
+    cardAnchorRef.current = anchor;
+    const pos = calcularPosicaoCard(anchor);
+    if (!pos) return;
+    setCardLoteId(lote.id);
+    setCardPos(pos);
+  }, []);
+
+  const agendarAbrirCard = useCallback(
+    (lote: EstoqueLote, anchor: HTMLElement) => {
+      cancelarFecharCard();
+      if (cardAbrirTimer.current) window.clearTimeout(cardAbrirTimer.current);
+      cardAbrirTimer.current = window.setTimeout(() => abrirCardImediato(lote, anchor), 170);
+    },
+    [cancelarFecharCard, abrirCardImediato],
+  );
+
+  const agendarFecharCard = useCallback(() => {
+    if (cardAbrirTimer.current) {
+      window.clearTimeout(cardAbrirTimer.current);
+      cardAbrirTimer.current = null;
+    }
+    cancelarFecharCard();
+    cardFecharTimer.current = window.setTimeout(() => {
+      cardAnchorRef.current = null;
+      cardCorrigidoRef.current = null;
+      setCardLoteId(null);
+      setCardPos(null);
+    }, 150);
+  }, [cancelarFecharCard]);
+
+  // Fecha tudo (gaveta e card) imediatamente, sem esperar a animação —
+  // usado quando o filtro, a aba ou a busca mudam (a lista toda vai
+  // remontar de qualquer forma) e quando o popover de filtros abre.
   const fecharImediato = useCallback(() => {
-    if (abrirTimer.current) {
-      window.clearTimeout(abrirTimer.current);
-      abrirTimer.current = null;
-    }
-    if (fecharTimer.current) {
-      window.clearTimeout(fecharTimer.current);
-      fecharTimer.current = null;
-    }
     setAbertoId(null);
     setExpandidos(new Set());
-  }, []);
+    fecharCardImediato();
+    cancelarPress();
+    pressLongoRef.current = false;
+  }, [fecharCardImediato, cancelarPress]);
 
   const abrirImediato = useCallback((lote: EstoqueLote) => {
     setAbertoId(lote.id);
@@ -277,27 +369,6 @@ export function EstoqueScreen() {
     });
     setFiltrosAbertos(false);
   }, []);
-
-  const agendarFechar = useCallback(() => {
-    if (abrirTimer.current) {
-      window.clearTimeout(abrirTimer.current);
-      abrirTimer.current = null;
-    }
-    cancelarFechar();
-    fecharTimer.current = window.setTimeout(() => {
-      setAbertoId(null);
-      if (reduzirMovimento()) setExpandidos(new Set());
-    }, 150);
-  }, [cancelarFechar]);
-
-  const agendarAbrir = useCallback(
-    (lote: EstoqueLote) => {
-      cancelarFechar();
-      if (abrirTimer.current) window.clearTimeout(abrirTimer.current);
-      abrirTimer.current = window.setTimeout(() => abrirImediato(lote), 170);
-    },
-    [cancelarFechar, abrirImediato],
-  );
 
   // Quando a transição de altura (fechando) termina num item que não é mais
   // o `abertoId` atual, ele sai de `expandidos` e desmonta. Se o item ainda
@@ -317,11 +388,142 @@ export function EstoqueScreen() {
     [abertoId],
   );
 
-  // Trocar de aba, filtro ou busca fecha o painel — sem isso ele continuaria
-  // mostrando os dados do lote anterior numa lista diferente.
+  // Mouse/pen sobre a linha: agenda o card flutuante depois de ~170ms — mas
+  // não se a GAVETA dessa mesma linha já estiver aberta (ela já mostra tudo;
+  // sobrepor seria exatamente o que foi reclamado). Toque não entra aqui —
+  // toque usa toque-longo (pointerdown/up/move abaixo).
+  const aoPointerEnterLinha = useCallback(
+    (lote: EstoqueLote, e: React.PointerEvent) => {
+      if (e.pointerType === "touch") return;
+      if (abertoId === lote.id) return;
+      agendarAbrirCard(lote, e.currentTarget as HTMLElement);
+    },
+    [abertoId, agendarAbrirCard],
+  );
+
+  const aoPointerLeaveLinha = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.pointerType === "touch") return;
+      agendarFecharCard();
+    },
+    [agendarFecharCard],
+  );
+
+  const aoPointerDownLinha = useCallback(
+    (lote: EstoqueLote, e: React.PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      cancelarPress();
+      pressLongoRef.current = false;
+      pressOrigemRef.current = { x: e.clientX, y: e.clientY };
+      const anchor = e.currentTarget as HTMLElement;
+      pressTimer.current = window.setTimeout(() => {
+        pressLongoRef.current = true;
+        abrirCardImediato(lote, anchor);
+      }, 450);
+    },
+    [abrirCardImediato, cancelarPress],
+  );
+
+  const aoPointerMoveLinha = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.pointerType !== "touch" || !pressOrigemRef.current) return;
+      const dx = e.clientX - pressOrigemRef.current.x;
+      const dy = e.clientY - pressOrigemRef.current.y;
+      if (Math.hypot(dx, dy) > 10) cancelarPress();
+    },
+    [cancelarPress],
+  );
+
+  const aoPointerUpLinha = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      cancelarPress();
+    },
+    [cancelarPress],
+  );
+
+  // Clique: fecha o card flutuante (se algum estiver aberto) e abre/fecha a
+  // gaveta em fluxo — a outra interação, decidida só por clique. Se o clique
+  // for o "click" sintético que segue um toque longo (que já abriu o card),
+  // ele é suprimido: toque longo abre SÓ o card, não a gaveta também.
+  const aoClicarLinha = useCallback(
+    (lote: EstoqueLote) => {
+      if (pressLongoRef.current) {
+        pressLongoRef.current = false;
+        return;
+      }
+      fecharCardImediato();
+      if (abertoId === lote.id) {
+        setAbertoId(null);
+        if (reduzirMovimento()) setExpandidos(new Set());
+        return;
+      }
+      abrirImediato(lote);
+    },
+    [abertoId, abrirImediato, fecharCardImediato],
+  );
+
+  // As 4 ações do card flutuante do hover não têm espaço para formulário ali
+  // mesmo — abrem a gaveta (mesmo destino do clique na linha), que já tem
+  // Editar/Entrada/Saída/Descartar/Histórico de verdade (LoteCard).
+  const aoAcaoRapida = useCallback(
+    (_acao: AcaoRapida, lote: EstoqueLote) => {
+      fecharCardImediato();
+      abrirImediato(lote);
+    },
+    [fecharCardImediato, abrirImediato],
+  );
+
+  // Trocar de aba, filtro ou busca fecha o painel e o card — sem isso eles
+  // continuariam mostrando os dados do lote anterior numa lista diferente.
   useEffect(() => {
     fecharImediato();
   }, [visao, especialidade, local, busca, soFalta, soAberto, fecharImediato]);
+
+  // Corrige a posição do card flutuante com o tamanho REAL dele (medido após
+  // montar, antes do paint) — a estimativa inicial em calcularPosicaoCard não
+  // conhece a altura de verdade (avisos e observação mudam quanto ela varia).
+  // Roda só uma vez por abertura (cardCorrigidoRef), senão viraria loop.
+  useLayoutEffect(() => {
+    if (!cardLoteId || !cardPos) return;
+    if (cardCorrigidoRef.current === cardLoteId) return;
+    const cardEl = cardElRef.current;
+    const area = areaRef.current;
+    const anchor = cardAnchorRef.current;
+    if (!cardEl || !area || !anchor) return;
+    cardCorrigidoRef.current = cardLoteId;
+    const r = cardEl.getBoundingClientRect();
+    const p = area.getBoundingClientRect();
+    const a = anchor.getBoundingClientRect();
+    const margem = 8;
+    const esquerda = Math.max(margem, Math.min(a.left - p.left, p.width - r.width - margem));
+    let acima = cardPos.acima;
+    let valor = cardPos.valor;
+    if (!acima && r.bottom > window.innerHeight - margem) {
+      acima = true;
+      valor = p.bottom - a.top + 6;
+    } else if (acima && r.top < margem) {
+      acima = false;
+      valor = a.bottom - p.top + 6;
+    }
+    if (esquerda !== cardPos.esquerda || acima !== cardPos.acima || valor !== cardPos.valor) {
+      setCardPos({ esquerda, acima, valor });
+    }
+  }, [cardLoteId, cardPos]);
+
+  // Toque ou clique fora do card flutuante (e fora da linha que o abriu) o
+  // fecha — cobre o caso do toque longo, que não tem "sair do hover".
+  useEffect(() => {
+    if (!cardLoteId) return;
+    function aoClicarFora(e: PointerEvent) {
+      const t = e.target as Node;
+      if (cardElRef.current?.contains(t)) return;
+      if (cardAnchorRef.current?.contains(t)) return;
+      fecharCardImediato();
+    }
+    document.addEventListener("pointerdown", aoClicarFora);
+    return () => document.removeEventListener("pointerdown", aoClicarFora);
+  }, [cardLoteId, fecharCardImediato]);
 
   // Fecha o popover de filtros ao clicar fora ou apertar Esc.
   useEffect(() => {
@@ -378,6 +580,8 @@ export function EstoqueScreen() {
         if (nomeLocal) partes.push(nomeLocal);
         return partes.join(" · ");
       })();
+
+  const cardLote = cardLoteId ? lotes.find((l) => l.id === cardLoteId) ?? null : null;
 
   const listaVazia = visao === "comprar" ? produtos.length === 0 : lotes.length === 0;
   const podeMostrarMais = visao !== "comprar" && lotes.length < total;
@@ -543,6 +747,25 @@ export function EstoqueScreen() {
             maxWidth: "100%",
           }}
         />
+        {Boolean(contagens?.vencidosComEstoque) && (
+          <button
+            onClick={() => setTriagemAberta(true)}
+            style={{
+              font: "inherit",
+              fontSize: 13,
+              fontWeight: 600,
+              color: theme.colors.danger,
+              background: "transparent",
+              border: `1px solid ${theme.colors.danger}`,
+              borderRadius: theme.radius.sm,
+              padding: "7px 14px",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            🗑 Triagem rápida ({contagens?.vencidosComEstoque})
+          </button>
+        )}
         <button
           onClick={() => setToast("O leitor de código chega em outra tarefa.")}
           style={{
@@ -560,6 +783,10 @@ export function EstoqueScreen() {
           Escanear
         </button>
       </header>
+
+      {triagemAberta && (
+        <TriagemSwipe onFechar={() => setTriagemAberta(false)} onAlgumaMudanca={recarregar} />
+      )}
 
       <RevisorPanel avisos={avisos} onAcao={setToast} />
 
@@ -622,8 +849,16 @@ export function EstoqueScreen() {
                 const ativo = abertoId === lote.id;
                 const montado = expandidos.has(lote.id);
                 return (
-                  <div key={lote.id} onPointerEnter={cancelarFechar} onPointerLeave={agendarFechar}>
-                    <LoteRow lote={lote} onAbrir={agendarAbrir} index={i} ativo={ativo} />
+                  <div
+                    key={lote.id}
+                    onPointerEnter={(e) => aoPointerEnterLinha(lote, e)}
+                    onPointerLeave={aoPointerLeaveLinha}
+                    onPointerDown={(e) => aoPointerDownLinha(lote, e)}
+                    onPointerMove={aoPointerMoveLinha}
+                    onPointerUp={aoPointerUpLinha}
+                    onPointerCancel={aoPointerUpLinha}
+                  >
+                    <LoteRow lote={lote} onAbrir={aoClicarLinha} index={i} ativo={ativo} />
                     {montado && (
                       <div
                         className={`lr-expansor${ativo ? " lr-expansor-open" : ""}`}
@@ -631,7 +866,7 @@ export function EstoqueScreen() {
                       >
                         <div className="lr-expansor-inner">
                           <div className="lr-expansor-content">
-                            <LoteCard lote={lote} />
+                            <LoteCard lote={lote} onAtualizado={recarregar} />
                           </div>
                         </div>
                       </div>
@@ -652,8 +887,15 @@ export function EstoqueScreen() {
                 const montado = expandidos.has(lote.id);
                 return (
                   <Fragment key={lote.id}>
-                    <div onPointerEnter={cancelarFechar} onPointerLeave={agendarFechar}>
-                      <LoteTile lote={lote} onAbrir={agendarAbrir} index={i} ativo={ativo} />
+                    <div
+                      onPointerEnter={(e) => aoPointerEnterLinha(lote, e)}
+                      onPointerLeave={aoPointerLeaveLinha}
+                      onPointerDown={(e) => aoPointerDownLinha(lote, e)}
+                      onPointerMove={aoPointerMoveLinha}
+                      onPointerUp={aoPointerUpLinha}
+                      onPointerCancel={aoPointerUpLinha}
+                    >
+                      <LoteTile lote={lote} onAbrir={aoClicarLinha} index={i} ativo={ativo} />
                     </div>
                     {montado && (
                       // grid-column ligado ao bloco clicado: precisa ser item direto
@@ -661,14 +903,12 @@ export function EstoqueScreen() {
                       // dele) para furar a fileira inteira e empurrar as próximas.
                       <div
                         style={{ gridColumn: "1 / -1" }}
-                        onPointerEnter={cancelarFechar}
-                        onPointerLeave={agendarFechar}
                         className={`lr-expansor${ativo ? " lr-expansor-open" : ""}`}
                         onTransitionEnd={(e) => aoFecharTransicao(lote.id, e)}
                       >
                         <div className="lr-expansor-inner">
                           <div className="lr-expansor-content">
-                            <LoteCard lote={lote} />
+                            <LoteCard lote={lote} onAtualizado={recarregar} />
                           </div>
                         </div>
                       </div>
@@ -723,6 +963,26 @@ export function EstoqueScreen() {
             </div>
           )}
         </div>
+
+        {cardLote && cardPos && (
+          // position:absolute dentro do container position:relative acima
+          // (areaRef) — nunca position:fixed aqui: um ancestral com
+          // backdrop-filter (o painel de vidro da lista) quebraria um fixed.
+          <div
+            ref={cardElRef}
+            className="lr-pop-in"
+            onPointerEnter={cancelarFecharCard}
+            onPointerLeave={agendarFecharCard}
+            style={{
+              position: "absolute",
+              zIndex: 40,
+              left: cardPos.esquerda,
+              ...(cardPos.acima ? { bottom: cardPos.valor } : { top: cardPos.valor }),
+            }}
+          >
+            <LoteHoverCard lote={cardLote} onAcao={aoAcaoRapida} />
+          </div>
+        )}
 
         {filtrosAbertos && filtrosPos && (
           <div ref={filtrosPopRef}>

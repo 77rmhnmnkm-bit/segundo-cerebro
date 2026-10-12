@@ -31,6 +31,33 @@ export async function buildContext(userMessage: string): Promise<string> {
     );
   }
 
+  // Estoque da Clínica Escola (est_lotes/est_produtos) — módulo separado do
+  // estoque pessoal/trabalho acima. Antes o assistente não via nada disso;
+  // agora entra o resumo urgente sempre, e o produto citado por nome quando
+  // a pergunta menciona um (mesmo padrão de keyword match usado abaixo para
+  // inventory_items pessoal).
+  const estoqueClinica = await pool.query(`
+    select
+      count(*) filter (where l.ativo and l.validade is not null and l.validade < current_date) as vencidos_com_estoque,
+      count(*) filter (where l.precisa_conferencia) as conferencia
+    from est_lotes l`);
+  const ec = estoqueClinica.rows[0];
+  if (Number(ec.vencidos_com_estoque) > 0 || Number(ec.conferencia) > 0) {
+    sections.push(
+      `Estoque da Clínica Escola: ${ec.vencidos_com_estoque} lote(s) vencido(s) ainda com saldo físico, ${ec.conferencia} lote(s) aguardando conferência (tela /estoque).`,
+    );
+  }
+  const produtosClinica = await pool.query(`
+    select p.nome, p.marca, coalesce(sum(l.quantidade), 0) as saldo, count(l.id) filter (where l.ativo) as lotes
+    from est_produtos p left join est_lotes l on l.produto_id = p.id
+    group by p.id, p.nome, p.marca`);
+  const mencionadosClinica = produtosClinica.rows.filter((p) => userMessage.toLowerCase().includes(p.nome.toLowerCase()));
+  for (const p of mencionadosClinica.slice(0, 3)) {
+    sections.push(
+      `Estoque da Clínica Escola — "${p.nome}"${p.marca ? ` (${p.marca})` : ""}: ${Number(p.saldo)} unidades em ${p.lotes} lote(s) ativo(s).`,
+    );
+  }
+
   const notes = await pool.query("select content from inbox_items where done = false order by created_at desc limit 10");
   if (notes.rowCount) {
     sections.push("Notas pendentes:\n" + notes.rows.map((n) => `- ${n.content}`).join("\n"));

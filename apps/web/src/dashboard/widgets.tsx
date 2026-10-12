@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { glassSurface } from "@app/ui";
 import { useTheme } from "../ThemeProvider";
 import { MiniCalendar } from "./MiniCalendar";
+import { EstoqueClinicaWidget } from "./EstoqueClinicaWidget";
 import { NextEventWidget } from "./NextEventWidget";
 import { UsageChart } from "./UsageChart";
 import { NotesWidget } from "./NotesWidget";
@@ -63,6 +64,7 @@ function ModuleShortcut({ name, subtitle, color, path }: { name: string; subtitl
 
 export const WIDGETS: WidgetDef[] = [
   ...MODULES.map((m) => ({ id: m.id, title: m.name, defW: 3, defH: 2, render: () => <ModuleShortcut name={m.name} subtitle={m.subtitle} color={m.color} path={m.path} /> })),
+  { id: "estoqueClinica", title: "Estoque da Clínica", defW: 4, defH: 2, render: () => <EstoqueClinicaWidget /> },
   { id: "calendar", title: "Calendário", defW: 4, defH: 4, render: () => <MiniCalendar /> },
   { id: "usage", title: "Uso de estoque", defW: 4, defH: 3, render: () => <UsageChart /> },
   { id: "notes", title: "Notas rápidas", defW: 4, defH: 3, render: () => <NotesWidget /> },

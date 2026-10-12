@@ -47,9 +47,12 @@ export function LoteRow({
       // EstoqueScreen, não aqui: um background inline sempre venceria a regra
       // ".lr-row:hover" no cascade CSS (inline bate qualquer seletor de
       // classe, mesmo :hover), o que apagaria a transição de cor no hover.
+      //
+      // Sem onPointerEnter aqui: passar o mouse abre o card flutuante (com
+      // ações rápidas), não a gaveta — isso é decidido por quem envolve esta
+      // linha em EstoqueScreen. Só o clique abre/fecha a gaveta.
       className={`lr-row lr-in${ativo ? " lr-row-open" : ""}`}
       onClick={() => onAbrir(lote)}
-      onPointerEnter={() => onAbrir(lote)}
       aria-expanded={ativo}
       style={{
         display: "grid",

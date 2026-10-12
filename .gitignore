@@ -32,3 +32,7 @@ Senhorita/
 
 # Scratch do subagent-driven-development
 .superpowers/
+
+# Dados reais da clínica e artefatos de build — não versionar
+estoque_notas_fiscais.sql
+*.tsbuildinfo
