@@ -36,3 +36,6 @@ Senhorita/
 # Dados reais da clínica e artefatos de build — não versionar
 estoque_notas_fiscais.sql
 *.tsbuildinfo
+
+# Modelo do Whisper (465 MB, baixado por script, não é fonte)
+apps/server/models/
